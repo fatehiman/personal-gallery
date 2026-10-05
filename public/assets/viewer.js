@@ -242,6 +242,7 @@
     if (!f.desc) { if (c) c.remove(); return; }
     if (!c) { c = document.createElement('div'); c.className = 'v-caption'; V.slide.appendChild(c); }
     c.textContent = f.desc;
+    c.dir = PG.textDir(f.desc);
     layout();
   }
   // Put the caption at the bottom edge of the visible (turned, zoomed) picture.
@@ -303,7 +304,7 @@
     V.el.querySelector('[data-v-int]').addEventListener('change', (e) => { PG.setPref('slide_interval', +e.target.value); if (V.play) armSlideshow(); });
     const st = V.stage;
     st.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY); }, { passive: false });
-    st.addEventListener('dblclick', (e) => { if (V.drawing) return; V.zoom > 1 ? zoomBy(1 / V.zoom) : zoomBy(2.5, e.clientX, e.clientY); });
+    st.addEventListener('dblclick', (e) => { if (V.drawing || e.target.closest('button, a, .v-nav, .video-js')) return; V.zoom > 1 ? zoomBy(1 / V.zoom) : zoomBy(2.5, e.clientX, e.clientY); });
 
     // pointer: pan when zoomed, swipe to change, pinch to zoom, draw face boxes
     const pts = new Map();

@@ -7,7 +7,8 @@
     if (!el || !window.L) return;
     const map = L.map(el, { worldCopyJump: true }).setView([32.4, 53.7], 5);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      // OSM refuses tile requests without a Referer; send only the site origin (not the page path).
+      maxZoom: 19, referrerPolicy: 'strict-origin', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     let points = [];
     try { points = (await PG.api('GET', '/api/map')).points; } catch (e) { PG.error(e); return; }

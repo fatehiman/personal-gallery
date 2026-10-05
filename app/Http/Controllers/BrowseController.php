@@ -60,7 +60,11 @@ class BrowseController extends Controller
             return response()->json($out);
         }
 
-        $dir = $indexer->sync($r['real'], $access->isAdmin() && $request->boolean('refresh'));
+        // "Refresh" only reads the directory entries again (no file content), so every user may use it.
+        // A folder is read again at most once per 30 seconds, whoever asks.
+        $known = $request->boolean('refresh') ? Directory::findByPath($r['real']) : null;
+        $force = $request->boolean('refresh') && ! ($known?->listed_at && $known->listed_at->gt(now()->subSeconds(30)));
+        $dir = $indexer->sync($r['real'], $force);
         $subdirs = Directory::where('parent_id', $dir->id)->get();
         $covers = $subdirs->isEmpty() ? collect() : Media::whereIn('id', Media::query()
             ->selectRaw('min(id)')->whereIn('directory_id', $subdirs->pluck('id'))->where('has_thumb', true)->groupBy('directory_id'))

@@ -12,7 +12,8 @@ return [
     'url_key' => env('GALLERY_URL_KEY', env('APP_KEY')),
 
     // How long a directory listing is trusted before we read the directory again (minutes).
-    'listing_ttl' => (int) env('GALLERY_LISTING_TTL', 720),
+    // Reading a listing reads only names/sizes/dates (no file content), so this is cheap.
+    'listing_ttl' => (int) env('GALLERY_LISTING_TTL', 20),
 
     // Thumbnails: longest side in px and WebP quality.
     'thumb_size' => (int) env('GALLERY_THUMB_SIZE', 480),

@@ -24,7 +24,7 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   rotate (stored in the DB only), favorites, download, info panel with all EXIF data. A blurred thumbnail shows
   while the original loads (not at all when the original is already cached). The description is shown on the photo
   (also in the slideshow) and replaces the file name on tiles. The info panel stays open while moving next/previous,
-  and is closed again when the viewer is opened next time.
+  and is closed again when the viewer is opened next time. Text with Persian/Arabic letters is shown right-to-left.
 - **Location names** need GPS data in the file. They are looked up in the background (cron, every minute,
   1 request per second) after a photo is first read — by viewing it or by a scan.
 - **Tags** and **people**. People can have a face box (draw a rectangle on the photo, like Facebook). The box is saved
@@ -40,7 +40,8 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
 ## How it keeps the slow storage fast
 
 - **Nothing is scanned up front.** Opening a folder reads only the directory entries (names, sizes, dates).
-  The listing is cached in the DB (12 hours by default; admin can refresh).
+  The listing is cached in the DB for 20 minutes, then read again on the next visit. Every user has a
+  **Refresh** button (same work: names/sizes/dates only, no file content; at most once per 30 s per folder).
 - A photo is read **only when its thumbnail is first needed**. That request reads EXIF/IPTC, size, GPS, video info,
   and makes a 480 px WebP thumbnail in `storage/app/thumbs` (about 25–35 KB each, so ~1 GB for 30,000 photos).
   The admin "Scan folder" job does exactly the same thing, file by file.

@@ -34,7 +34,7 @@
 
 /* tiles: frosted label floating over the picture */
 .theme-en .view-medium .tile.file .label, .theme-en .view-large .tile.file .label {
-  position: absolute; inset-inline: 8px; bottom: 8px; border-radius: 10px; background: rgba(255, 255, 255, .82);
+  position: absolute; inset-inline: 8px; bottom: 8px; border-radius: 10px; background: rgba(255, 255, 255, .85);
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transform: translateY(6px); transition: .2s;
 }
 .theme-en .view-medium .tile.file:hover .label, .theme-en .view-large .tile.file:hover .label { opacity: 1; transform: none; }

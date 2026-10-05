@@ -77,6 +77,7 @@
     const browse = state.mode === 'browse';
     root.querySelector('[data-act="up"]').disabled = !(browse && state.path !== '');
     root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse));
+    root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || (!isAdmin && state.path === '')));
     document.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === state.sort));
     document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
     const vi = root.querySelector('.view-ic use');
@@ -197,7 +198,7 @@
     // A description replaces the file name on the tile (one line, cut with "…").
     return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
       <div class="thumb">${ph}${img}${play}${ext}</div><div class="badge-row">${badges}</div>
-      <div class="label"><span class="lbl">${esc(it.desc || it.name)}</span><small>${sub}</small></div></button>`;
+      <div class="label"><span class="lbl" dir="${PG.textDir(it.desc || it.name)}">${esc(it.desc || it.name)}</span><small>${sub}</small></div></button>`;
   }
 
   function tableHead() {
@@ -225,7 +226,7 @@
     const chips = (a) => `<div class="tg">${(a || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>`;
     return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${th}<span>${esc(it.name)}</span></div></td>
       <td class="dt">${PG.dateHtml(it.taken)}</td><td class="num">${dim}</td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>
-      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td>${isAdmin ? '<td></td>' : ''}</tr>`;
+      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td>${isAdmin ? '<td></td>' : ''}</tr>`;
   }
 
   // ---------------------------------------------------------------- lazy loading
@@ -486,7 +487,7 @@
         const img = el.querySelector('img');
         if (img && f.thumb && img.dataset.src !== f.thumb) { img.dataset.src = f.thumb; img.src = f.thumb; }
         const lbl = el.querySelector('.lbl');
-        if (lbl) { lbl.textContent = f.desc || f.name; el.classList.toggle('has-desc', !!f.desc); }
+        if (lbl) { lbl.textContent = f.desc || f.name; lbl.dir = PG.textDir(f.desc || f.name); el.classList.toggle('has-desc', !!f.desc); }
         const badges = el.querySelector('.badge-row');
         if (badges) {
           const fav = badges.querySelector('.fav');

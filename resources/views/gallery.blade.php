@@ -42,8 +42,8 @@
                     @endforeach
                 </div>
             </div>
+            <button class="tool c5 browse-only" type="button" data-act="refresh" title="{{ __('ui.refresh') }}">@include('partials.icon', ['i' => 'refresh-cw'])</button>
             @if (auth()->user()->is_admin)
-                <button class="tool c5 admin-only" type="button" data-act="refresh" title="{{ __('ui.refresh') }}">@include('partials.icon', ['i' => 'refresh-cw'])</button>
                 <button class="tool scan-btn admin-only" type="button" data-act="scan" title="{{ __('ui.scan') }}">@include('partials.icon', ['i' => 'scan-search', 'class' => 'scan-ic'])<span class="scan-label">{{ __('ui.scan') }}</span></button>
             @endif
         </div>

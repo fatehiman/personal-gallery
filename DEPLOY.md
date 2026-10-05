@@ -39,6 +39,8 @@ It whitelists your IP, uploads `git archive HEAD`, backs up the old app and DB (
    ```
    The unit mounts the account's **home** (`host:` — not `host:/`, which gives "Permission denied").
    It uses `sshpass -f` as `ssh_command`, so the password is read again on every reconnect.
+   SSHFS's own directory cache is 60 s (`dcache_timeout`), shorter than the app's 20 min listing cache,
+   so "Refresh" really sees new files.
    **When you rotate the storage box password**: update `/etc/gallery-storagebox.pass`, then
    `systemctl restart gallery-storage`.
 3. Virtualmin: `modify-web --mode fpm`, then (separate call) `--php-version 8.4`, then `--document-dir app/public`;
@@ -55,6 +57,11 @@ It whitelists your IP, uploads `git archive HEAD`, backs up the old app and DB (
   then update `DB_PASSWORD` in `app/.env` and run `php8.4 artisan config:cache` as `gallery`.
 - **Media URL key** (`GALLERY_URL_KEY`): all old media links stop working; browsers and Cloudflare fetch new ones.
 - **A user's password**: profile page, admin user page, or `php8.4 artisan gallery:user <name> --password-stdin`.
+
+## Map tiles
+
+The map uses OpenStreetMap tiles. Their servers block requests without a `Referer`, and the site sends
+`Referrer-Policy: same-origin`, so the tile layer sets `referrerPolicy: 'strict-origin'` (only the site origin is sent).
 
 ## Do not
 

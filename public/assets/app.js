@@ -29,6 +29,8 @@
     const p = (v) => String(v).padStart(2, '0');
     return PG.digits((h ? h + ':' + p(m) : m) + ':' + p(x));
   };
+  // Text with any Persian/Arabic letter is shown right-to-left (so "…" cuts at the correct end).
+  PG.textDir = (s) => (/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(String(s || '')) ? 'rtl' : 'ltr');
   PG.digits = (s) => (fa ? String(s).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[d]) : String(s));
 
   // ---------------------------------------------------------------- dates
