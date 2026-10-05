@@ -74,7 +74,7 @@ class BrowseController extends Controller
                 'cover' => isset($covers[$sd->id]) ? Signer::thumb($covers[$sd->id]) : null,
             ];
         }
-        $media = Media::where('directory_id', $dir->id)->with(['tags', 'persons'])->get();
+        $media = Media::where('directory_id', $dir->id)->with(['tags', 'persons'])->get(Media::LIST_COLUMNS);
         $favs = Presenter::favMap($access, $media->pluck('id'));
         foreach ($media as $m) {
             $out['files'][] = Presenter::media($m, $access, $favs);

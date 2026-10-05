@@ -13,6 +13,11 @@ class Media extends Model
 
     protected $guarded = ['id'];
 
+    /** Columns needed for listings (everything except the large "exif" JSON). */
+    public const LIST_COLUMNS = ['id', 'directory_id', 'path', 'filename', 'ext', 'type', 'size', 'file_mtime', 'file_ctime',
+        'scanned_at', 'scan_error', 'width', 'height', 'taken_at', 'camera_make', 'camera_model', 'duration', 'gps_lat', 'gps_lng',
+        'city_en', 'city_fa', 'country_en', 'country_fa', 'has_thumb', 'thumb_v', 'thumb_w', 'thumb_h', 'description', 'rotation'];
+
     protected function casts(): array
     {
         return [
@@ -49,8 +54,10 @@ class Media extends Model
 
     public function isThumbable(): bool
     {
-        return ($this->type === 'image' && in_array($this->ext, config('gallery.thumbable_ext'), true))
-            || $this->type === 'video';
+        static $ok = null;
+        $ok ??= array_flip(config('gallery.thumbable_ext'));
+
+        return ($this->type === 'image' && isset($ok[$this->ext])) || $this->type === 'video';
     }
 
     public function needsScan(): bool

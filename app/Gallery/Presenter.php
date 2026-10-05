@@ -13,12 +13,15 @@ class Presenter
             return null;
         }
 
-        return $utc ? $dt->copy()->utc()->format('Y-m-d\TH:i:s\Z') : $dt->format('Y-m-d\TH:i:s');
+        // The app time zone is UTC, so stored times are already UTC.
+        return $dt->format($utc ? 'Y-m-d\TH:i:s\Z' : 'Y-m-d\TH:i:s');
     }
 
     /** @param  array<int,bool>  $favs  media id => true */
     public static function media(Media $m, Access $access, array $favs = [], bool $withFolder = false): array
     {
+        static $playable = null;
+        $playable ??= array_flip(config('gallery.playable_ext'));
         $fa = app()->getLocale() === 'fa';
         $out = [
             'id' => $m->id,
@@ -47,7 +50,7 @@ class Presenter
             'city' => $fa ? ($m->city_fa ?: $m->city_en) : ($m->city_en ?: $m->city_fa),
             'country' => $fa ? ($m->country_fa ?: $m->country_en) : ($m->country_en ?: $m->country_fa),
             'gps' => $m->gps_lat !== null ? [$m->gps_lat, $m->gps_lng] : null,
-            'playable' => $m->type === 'video' && in_array($m->ext, config('gallery.playable_ext'), true),
+            'playable' => $m->type === 'video' && isset($playable[$m->ext]),
         ];
         if ($m->relationLoaded('tags')) {
             $out['tags'] = $m->tags->pluck('name')->all();

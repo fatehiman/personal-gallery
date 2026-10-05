@@ -66,7 +66,7 @@ class SearchController extends Controller
             'sort' => ['nullable', 'string', 'max:20'],
         ]);
         $access = Access::for($request->user());
-        $q = Media::query()->select('media.*');
+        $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS));
         $access->scope($q, 'media.path');
         $dirs = Directory::query();
         $access->scope($dirs, 'path');
@@ -163,7 +163,7 @@ class SearchController extends Controller
     public function favorites(Request $request)
     {
         $access = Access::for($request->user());
-        $q = Media::query()->select('media.*')
+        $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))
             ->join('favorites', 'favorites.media_id', '=', 'media.id')
             ->where('favorites.user_id', $request->user()->id)
             ->orderByDesc('favorites.created_at');
@@ -176,7 +176,7 @@ class SearchController extends Controller
     {
         $access = Access::for($request->user());
         $today = Carbon::now(config('app.display_timezone'));
-        $q = Media::query()->select('media.*')
+        $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))
             ->whereNotNull('taken_at')
             ->whereMonth('taken_at', $today->month)->whereDay('taken_at', $today->day)
             ->whereYear('taken_at', '<', $today->year)

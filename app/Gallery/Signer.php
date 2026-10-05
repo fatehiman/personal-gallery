@@ -12,7 +12,9 @@ class Signer
 {
     public static function sig(string $kind, int $id, int $v): string
     {
-        $raw = hash_hmac('sha256', "$kind|$id|$v", (string) config('gallery.url_key'), true);
+        static $key = null;
+        $key ??= (string) config('gallery.url_key');
+        $raw = hash_hmac('sha256', "$kind|$id|$v", $key, true);
 
         return substr(rtrim(strtr(base64_encode($raw), '+/', '-_'), '='), 0, 22);
     }
