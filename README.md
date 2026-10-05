@@ -21,7 +21,12 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
 - **Search** in folder names, file names, tags, people, descriptions, city and country. Filters: date range (with a
   Gregorian/Jalali date picker), type, tag, person, camera, place, favorites, has location, has description, only this folder.
 - **Fullscreen viewer**: fade transitions, swipe, keyboard, zoom (wheel, pinch, double-tap), slideshow (3/5/10 s),
-  rotate (stored in the DB only), favorites, download, info panel with all EXIF data.
+  rotate (stored in the DB only), favorites, download, info panel with all EXIF data. A blurred thumbnail shows
+  while the original loads (not at all when the original is already cached). The description is shown on the photo
+  (also in the slideshow) and replaces the file name on tiles. The info panel stays open while moving next/previous,
+  and is closed again when the viewer is opened next time.
+- **Location names** need GPS data in the file. They are looked up in the background (cron, every minute,
+  1 request per second) after a photo is first read — by viewing it or by a scan.
 - **Tags** and **people**. People can have a face box (draw a rectangle on the photo, like Facebook). The box is saved
   as 0..1 coordinates, ready for automatic face detection later. Name lists suggest existing names after 500 ms of no
   typing, and match any part of a name (`ja` finds `Mrs. Janet Jackson`).

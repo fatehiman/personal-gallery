@@ -247,6 +247,8 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .tile.loading .thumb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 50%, transparent 70%); background-size: 200% 100%; animation: shimmer 1.3s infinite; }
 @keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
 .tile .label { padding: 7px 10px 8px; font-size: .86em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface); }
+.tile .label .lbl { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.has-desc .label .lbl { font-style: italic; }
 .tile .label small { display: block; color: var(--muted); font-weight: 500; font-size: .9em; }
 .view-tiny .tile .label, .view-tiny .badge-row { display: none; }
 .otd .tile .label small { display: block !important; }
@@ -324,7 +326,7 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .v-top { display: flex; align-items: center; gap: 4px; padding: 8px 10px; z-index: 3; flex-wrap: wrap; }
 .v-title { flex: 1; min-width: 0; padding: 0 8px; }
 .v-title b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--heading); }
-.v-title small { color: var(--muted); }
+.v-title small { display: block; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .v-top .icon-btn { background: rgba(255,255,255,.6); }
 .v-top .icon-btn:hover { background: rgba(255,255,255,.95); }
 .v-top .icon-btn.on { color: var(--fav); }
@@ -333,8 +335,18 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .v-slide { position: absolute; inset: 0; display: grid; place-items: center; padding: 6px 56px 12px; opacity: 0; transition: opacity .45s ease; }
 .v-slide.in { opacity: 1; }
 .v-frame { position: absolute; transform-origin: center center; transition: transform .25s ease; }
-.v-frame img { display: block; border-radius: var(--viewer-img-radius); box-shadow: 0 16px 50px rgba(60,70,90,.18); background: #fff; }
-.v-frame .lowres { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; filter: blur(6px); }
+.v-frame img { position: relative; z-index: 1; display: block; border-radius: var(--viewer-img-radius); }
+.v-frame { border-radius: var(--viewer-img-radius); box-shadow: 0 16px 50px rgba(60,70,90,.18); }
+.v-frame.has-low::before { content: ''; position: absolute; inset: 0; z-index: 0; border-radius: inherit; background: var(--low) center / 100% 100% no-repeat; filter: blur(10px); transform: scale(1.02); transition: opacity .3s; }
+.v-frame.has-low { overflow: hidden; }
+.v-frame.ready::before { opacity: 0; }
+.v-frame[data-video] { box-shadow: none; overflow: visible; }
+.v-caption {
+  position: absolute; z-index: 4; transform: translateX(-50%); padding: 4px 12px; pointer-events: none;
+  color: #fff; font-weight: 700; font-size: 1.02rem; line-height: 1.5; text-align: center; white-space: pre-line;
+  text-shadow: 0 0 2px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7), 0 1px 12px rgba(0,0,0,.6);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
 .v-frame video, .v-frame .video-js { display: block; border-radius: var(--viewer-img-radius); background: #000; }
 .v-frame.drawing { cursor: crosshair; }
 .v-nav { position: absolute; top: 50%; z-index: 4; transform: translateY(-50%); width: 46px; height: 46px; border-radius: 50%; border: 0; background: rgba(255,255,255,.75); color: var(--text); display: grid; place-items: center; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
@@ -442,6 +454,8 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
   .v-slide { padding: 4px 4px 10px; }
   .v-nav { width: 38px; height: 38px; opacity: .8; }
   .v-top { padding: 6px; }
+  .v-top .v-title { order: 10; flex: 0 0 100%; padding: 2px 6px 0; }
+  .v-top [data-v="close"] { margin-inline-end: auto; }
   .v-top .icon-btn { width: 36px; height: 36px; }
   .progress { width: 80px; }
   .field.inline { flex-direction: column; align-items: stretch; gap: 3px; }

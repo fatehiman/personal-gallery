@@ -38,6 +38,7 @@
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); opacity: 0; transform: translateY(6px); transition: .2s;
 }
 .theme-en .view-medium .tile.file:hover .label, .theme-en .view-large .tile.file:hover .label { opacity: 1; transform: none; }
+.theme-en .view-medium .tile.file.has-desc .label, .theme-en .view-large .tile.file.has-desc .label { opacity: 1; transform: none; }
 @media (hover: none) { .theme-en .view-medium .tile.file .label, .theme-en .view-large .tile.file .label { opacity: 1; transform: none; } }
 .theme-en .tile.folder { background: var(--surface); }
 .theme-en .tile.folder .thumb { border-radius: var(--tile-radius) var(--tile-radius) 0 0; background: linear-gradient(160deg, var(--c), color-mix(in srgb, var(--c) 55%, #fff)); }

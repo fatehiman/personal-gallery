@@ -42,7 +42,7 @@
     V = {
       el, files, index, opts, stage: el.querySelector('.v-stage'), panel: el.querySelector('.v-panel'),
       slide: null, zoom: 1, px: 0, py: 0, player: null, drawing: false, play: false, timer: null,
-      panelOpen: PG.pref('viewer_panel', window.innerWidth > 900),
+      panelOpen: false, // info panel stays open while moving next/previous, but each new opening starts closed
     };
     history.pushState({ pgViewer: 1 }, '');
     requestAnimationFrame(() => el.classList.add('show'));
@@ -94,7 +94,13 @@
     if (f.type === 'image' && IMG_SHOW.includes(f.ext)) showImage(f, slide);
     else if (f.type === 'video') showVideo(f, slide);
     else noPreview(f, slide);
-    if (!info[f.id]) loadInfo(f).then(() => { if (V && cur() === f) { header(f); renderPanel(f); drawFaces(); } });
+    if (!info[f.id]) loadInfo(f).then(() => {
+      if (!V || cur() !== f) return;
+      const fr = slide.querySelector('.v-frame');
+      if (fr && fr._setSize && f.w) fr._setSize(f.w, f.h);
+      header(f); renderPanel(f); drawFaces(); caption(f);
+    });
+    caption(f);
   }
 
   function header(f) {
@@ -120,30 +126,49 @@
     return frame;
   }
 
+  // Blurred thumbnail as the frame background, the original on top. If the original is already in the
+  // browser cache it paints at once, so no blur is seen. The frame size always comes from the real image.
   function showImage(f, slide) {
-    const w0 = f.w || f.tw || 800, h0 = f.h || f.th || 600;
-    const frame = frameFor(f, slide, w0, h0);
-    if (f.thumb) {
-      const low = new Image();
-      low.className = 'lowres'; low.alt = ''; low.src = f.thumb;
-      frame.appendChild(low);
-    }
+    const rot = f.rot || 0;
+    let w0 = f.w, h0 = f.h;
+    if (!w0 && f.tw) { [w0, h0] = rot % 180 ? [f.th, f.tw] : [f.tw, f.th]; } // thumbnails already contain the rotation
+    const frame = frameFor(f, slide, w0 || 4, h0 || 3);
+    if (!w0) frame.style.visibility = 'hidden'; // unknown size: wait for the thumbnail or the image
+    // The thumbnail file is already turned by "rot" but the frame is turned too, so use it only when rot is 0.
+    if (f.thumb && !rot) { frame.style.setProperty('--low', `url("${f.thumb}")`); frame.classList.add('has-low'); }
     const img = new Image();
-    img.alt = f.name; img.draggable = false;
-    img.style.opacity = '0'; img.style.transition = 'opacity .5s ease';
+    img.alt = ''; img.draggable = false; img.decoding = 'async';
     frame.appendChild(img);
     layout(frame);
+    const setSize = (w, h) => {
+      if (!w || !h || frame.classList.contains('ready')) return;
+      frame.dataset.w = w; frame.dataset.h = h;
+      frame.style.visibility = '';
+      layout(frame);
+    };
+    frame._setSize = setSize;
     img.onload = () => {
-      if (!f.w) { frame.dataset.w = img.naturalWidth; frame.dataset.h = img.naturalHeight; layout(frame); }
-      img.style.opacity = '1';
+      frame.classList.remove('ready');
+      setSize(img.naturalWidth, img.naturalHeight); // browsers apply the EXIF orientation here
+      frame.classList.add('ready');
+      img.alt = f.name;
       const sp = slide.querySelector('.v-spinner'); if (sp) sp.remove();
-      setTimeout(() => { const l = frame.querySelector('.lowres'); if (l) l.remove(); }, 600);
       if (V && V.play) armSlideshow();
     };
     img.onerror = () => { const sp = slide.querySelector('.v-spinner'); if (sp) sp.remove(); if (!f.thumb) noPreview(f, slide); };
-    // Read the thumbnail first (it also scans the file), then the original.
     const go = () => { img.src = f.url; };
-    if (f.thumb && !f.ready) { const pre = new Image(); pre.onload = pre.onerror = go; pre.src = f.thumb; } else go();
+    if (f.thumb) {
+      // The thumbnail is small (and cached). Its size gives the right shape before the original arrives.
+      // For a file never read before, this request also reads its metadata, so it runs before the original.
+      const pre = new Image();
+      pre.onload = () => {
+        if (!f.w && pre.naturalWidth) { if (rot % 180) setSize(pre.naturalHeight, pre.naturalWidth); else setSize(pre.naturalWidth, pre.naturalHeight); }
+        if (!f.ready) go();
+      };
+      pre.onerror = () => { if (!f.ready) go(); };
+      pre.src = f.thumb;
+      if (f.ready) go();
+    } else go();
     drawFaces();
   }
 
@@ -204,10 +229,33 @@
     frame.style.left = (V.stage.clientWidth - fw) / 2 + 'px';
     frame.style.top = (V.stage.clientHeight - fh) / 2 + 'px';
     frame.style.transform = `translate(${V.px}px, ${V.py}px) rotate(${rot}deg) scale(${V.zoom})`;
-    frame.querySelectorAll('img:not(.lowres), .lowres').forEach((im) => { im.style.width = fw + 'px'; im.style.height = fh + 'px'; });
+    frame.querySelectorAll(':scope > img').forEach((im) => { im.style.width = fw + 'px'; im.style.height = fh + 'px'; });
     if (V.player) V.player.dimensions(fw, fh);
+    placeCaption(fw, fh, rot);
   }
   function onResize() { layout(); }
+
+  // Description shown on the picture (also in the slideshow).
+  function caption(f) {
+    if (!V || !V.slide) return;
+    let c = V.slide.querySelector('.v-caption');
+    if (!f.desc) { if (c) c.remove(); return; }
+    if (!c) { c = document.createElement('div'); c.className = 'v-caption'; V.slide.appendChild(c); }
+    c.textContent = f.desc;
+    layout();
+  }
+  // Put the caption at the bottom edge of the visible (turned, zoomed) picture.
+  function placeCaption(fw, fh, rot) {
+    const c = V && V.slide && V.slide.querySelector('.v-caption');
+    if (!c) return;
+    const side = rot % 180 !== 0;
+    const vw = (side ? fh : fw) * V.zoom, vh = (side ? fw : fh) * V.zoom;
+    const H = V.stage.clientHeight, W = V.stage.clientWidth;
+    const bottom = Math.max(8, (H - vh) / 2 - V.py + 10);
+    c.style.bottom = Math.min(bottom, H - 40) + 'px';
+    c.style.maxWidth = Math.max(160, Math.min(vw - 24, W - 24)) + 'px';
+    c.style.left = W / 2 + V.px + 'px';
+  }
 
   // ---------------------------------------------------------------- navigation
   function next() { if (V) show(V.index + 1, 1); }
@@ -322,7 +370,7 @@
     if (a === 'close') close();
     else if (a === 'next') next();
     else if (a === 'prev') prev();
-    else if (a === 'panel') { V.panelOpen = !V.panelOpen; PG.setPref('viewer_panel', V.panelOpen, false); header(f); setTimeout(() => layout(), 30); }
+    else if (a === 'panel') { V.panelOpen = !V.panelOpen; header(f); setTimeout(() => layout(), 30); }
     else if (a === 'fs') { if (document.fullscreenElement) document.exitFullscreen(); else V.el.requestFullscreen && V.el.requestFullscreen().catch(() => {}); }
     else if (a === 'play') toggleSlideshow();
     else if (a === 'face') { setDrawing(!V.drawing); if (!V.panelOpen) action('panel'); }
@@ -438,6 +486,7 @@
       try {
         const r = await PG.api('POST', `/api/media/${f.id}/description`, { description: ta.value });
         d.desc = f.desc = r.desc; p.querySelector('[data-desc-foot]').hidden = true;
+        caption(f); V.opts.onUpdate && V.opts.onUpdate(f);
         PG.toast(icon('check') + ' ' + esc(t('saved')), { timeout: 1800 });
       } catch (e) { PG.error(e); }
     });

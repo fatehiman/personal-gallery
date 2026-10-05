@@ -194,9 +194,10 @@
     const ext = !it.thumb || it.type === 'other' ? `<span class="ext">${esc(it.ext)}</span>` : '';
     const sub = state.mode === 'search' || state.mode === 'favorites' || state.mode === 'onthisday'
       ? esc(it.folderName || '') : PG.dateHtml(it.taken || it.mtime, false);
-    return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''}" data-file="${fi}" id="f${it.id}">
+    // A description replaces the file name on the tile (one line, cut with "…").
+    return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
       <div class="thumb">${ph}${img}${play}${ext}</div><div class="badge-row">${badges}</div>
-      <div class="label">${esc(it.name)}<small>${sub}</small></div></button>`;
+      <div class="label"><span class="lbl">${esc(it.desc || it.name)}</span><small>${sub}</small></div></button>`;
   }
 
   function tableHead() {
@@ -484,6 +485,8 @@
         if (!el) return;
         const img = el.querySelector('img');
         if (img && f.thumb && img.dataset.src !== f.thumb) { img.dataset.src = f.thumb; img.src = f.thumb; }
+        const lbl = el.querySelector('.lbl');
+        if (lbl) { lbl.textContent = f.desc || f.name; el.classList.toggle('has-desc', !!f.desc); }
         const badges = el.querySelector('.badge-row');
         if (badges) {
           const fav = badges.querySelector('.fav');
