@@ -16,6 +16,10 @@ class SecurityHeaders
         $h->set('Referrer-Policy', 'same-origin');
         $h->set('X-Robots-Tag', 'noindex, nofollow');
         $h->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        $h->set('Cross-Origin-Opener-Policy', 'same-origin');
+        if ($request->isSecure()) {
+            $h->set('Strict-Transport-Security', 'max-age=15552000');
+        }
         if (! $h->has('Content-Security-Policy')) {
             $h->set('Content-Security-Policy', implode('; ', [
                 "default-src 'self'",

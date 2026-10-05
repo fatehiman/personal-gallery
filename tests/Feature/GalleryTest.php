@@ -82,6 +82,7 @@ class GalleryTest extends TestCase
         $other = Media::where('filename', 'other.jpg')->firstOrFail();
         $u = $this->user();
         FolderAccess::create(['user_id' => $u->id, 'title' => 'X', 'path' => 'A']);
+        $this->flushSession(); // new browser for the second user
         $this->actingAs($u)->getJson('/api/media/'.$other->id)->assertNotFound();
         $this->actingAs($u)->postJson('/api/media/'.$other->id.'/tags', ['name' => 'x'])->assertNotFound();
     }
@@ -128,6 +129,18 @@ class GalleryTest extends TestCase
         $this->actingAs($admin)->postJson('/api/admin/scan', ['path' => 'D'])->assertStatus(409);
         $this->actingAs($admin)->postJson('/api/admin/scan/stop')->assertOk()->assertJsonPath('active', null);
         $this->actingAs($admin)->postJson('/api/admin/scan', ['path' => 'D'])->assertOk();
+    }
+
+    public function test_failed_logins_are_limited_and_fake_forwarded_ip_does_not_help(): void
+    {
+        User::create(['name' => 'V', 'username' => 'victim', 'password' => 'password123']);
+        for ($i = 0; $i < 5; $i++) {
+            $this->withHeader('X-Forwarded-For', "10.0.0.$i")->post('/login', ['username' => 'victim', 'password' => 'wrong'])
+                ->assertSessionHasErrors('username');
+        }
+        // The 6th try, even with a new (fake) forwarded IP and the right password, is blocked.
+        $this->withHeader('X-Forwarded-For', '10.0.0.99')->post('/login', ['username' => 'victim', 'password' => 'password123']);
+        $this->assertGuest();
     }
 
     public function test_login_in_persian_saves_persian_but_english_does_not_change_it(): void

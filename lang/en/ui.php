@@ -11,6 +11,7 @@ return [
     'password' => 'Password',
     'remember' => 'Keep me signed in',
     'login_failed' => 'Wrong username or password.',
+    'login_throttled' => 'Too many failed attempts. Please try again in :m minutes.',
     'language' => 'Language',
     'english' => 'English',
     'persian' => 'فارسی',

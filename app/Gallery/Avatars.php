@@ -16,6 +16,11 @@ class Avatars
     /** Save an uploaded image (re-encoded, so no foreign bytes are kept). */
     public function storeUpload(User $user, UploadedFile $file): bool
     {
+        // Check the pixel size before decoding: a small file can hold a huge image ("decompression bomb").
+        $size = @getimagesize($file->getRealPath());
+        if (! $size || $size[0] * $size[1] > 40_000_000) {
+            return false;
+        }
         $img = @imagecreatefromstring((string) file_get_contents($file->getRealPath()));
         if (! $img) {
             return false;
@@ -61,7 +66,8 @@ class Avatars
             }
             try {
                 $r = Http::timeout(min(4, $left))->connectTimeout(min(3, $left))->withHeaders(['User-Agent' => 'PersonalGallery/1.0'])->get($url);
-                if ($r->status() === 200 && str_starts_with((string) $r->header('Content-Type'), 'image/') && strlen($r->body()) < 5_000_000) {
+                $dims = $r->status() === 200 ? @getimagesizefromstring($r->body()) : false;
+                if ($dims && $dims[0] * $dims[1] <= 16_000_000 && str_starts_with((string) $r->header('Content-Type'), 'image/') && strlen($r->body()) < 5_000_000) {
                     $img = @imagecreatefromstring($r->body());
                     if ($img) {
                         $this->save($user, $img, $name);

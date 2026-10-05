@@ -52,6 +52,7 @@ class UserController extends Controller
         ]);
         if (! empty($data['password'])) {
             $user->password = $data['password'];
+            $user->setRememberToken(\Illuminate\Support\Str::random(60)); // log the user out everywhere
         }
         $user->save();
         if ($request->hasFile('avatar')) {

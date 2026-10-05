@@ -105,9 +105,17 @@ See [DEPLOY.md](DEPLOY.md).
 
 ## Security notes
 
-- No registration, login is rate-limited, sessions are regenerated on login.
+- No registration. Failed logins are limited per IP + username (5 per 5 min) and per IP (20 per 15 min),
+  plus a flood limit of 10 login posts per minute per IP. Each failure is logged (`login failed`, with IP).
+- The visitor IP comes from `X-Forwarded-For` **only when the request comes from Cloudflare's IP ranges**
+  (`bootstrap/trusted_proxies.php`). A bot that connects to the server IP directly cannot fake its IP.
+- Only the `APP_URL` host is accepted (other `Host` headers get 400). HSTS is sent on HTTPS.
+- Sessions are regenerated on login. Changing a password (self or by admin) ends the user's other sessions
+  and "keep me signed in" cookies. A disabled user is logged out on the next request.
+- API calls are limited to 300 per minute per user.
 - Every path from the browser is normalized; `..` is refused; symlinks are ignored; users can reach only their
   assigned folders (checked on every listing and every media action).
-- Uploaded profile pictures are re-encoded (no original bytes are kept).
+- Uploaded profile pictures are re-encoded (no original bytes are kept); images over 40 megapixels are refused
+  before decoding (protects against "decompression bomb" files).
 - Strict Content-Security-Policy (no inline scripts), `X-Frame-Options: DENY`, `noindex`.
 - `.env` holds all secrets and is never committed.

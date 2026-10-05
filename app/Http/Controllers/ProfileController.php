@@ -55,7 +55,11 @@ class ProfileController extends Controller
             'current_password' => ['required', 'current_password'],
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
-        $request->user()->forceFill(['password' => Hash::make($request->input('password'))])->save();
+        $user = $request->user();
+        // New remember token: "Keep me signed in" cookies on other devices stop working.
+        $user->forceFill(['password' => Hash::make($request->input('password')), 'remember_token' => \Illuminate\Support\Str::random(60)])->save();
+        // Keep this session valid for auth.session (it compares the password hash).
+        $request->session()->put('password_hash_web', $user->getAuthPassword());
         $request->session()->regenerate();
 
         return redirect()->route('profile')->with('ok', __('ui.password_changed'));

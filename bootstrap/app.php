@@ -22,7 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->trustProxies(at: '*');
+        // Not "*": then anybody could fake X-Forwarded-For and get around the login limits.
+        $middleware->trustProxies(at: require __DIR__.'/trusted_proxies.php',
+            headers: Request::HEADER_X_FORWARDED_FOR | Request::HEADER_X_FORWARDED_PROTO);
+        // Only the APP_URL host (exact match). Other Host headers get "400 Bad Request".
+        $middleware->trustHosts(at: fn () => ['^'.preg_quote(parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost').'$'], subdomains: false);
         $middleware->web(append: [SetLocale::class, SecurityHeaders::class]);
         $middleware->alias(['admin' => AdminOnly::class]);
         $middleware->redirectGuestsTo(fn () => route('login'));

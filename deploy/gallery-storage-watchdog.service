@@ -1,0 +1,7 @@
+[Unit]
+Description=Check the gallery storage box mount and remount it when it hangs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/gallery-storage-watchdog
+TimeoutStartSec=180

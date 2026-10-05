@@ -11,6 +11,7 @@ return [
     'password' => 'رمز عبور',
     'remember' => 'مرا به خاطر بسپار',
     'login_failed' => 'نام کاربری یا رمز عبور اشتباه است.',
+    'login_throttled' => 'تلاش ناموفق زیاد بود. لطفا :m دقیقه دیگر دوباره امتحان کنید.',
     'language' => 'زبان',
     'english' => 'English',
     'persian' => 'فارسی',

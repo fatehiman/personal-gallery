@@ -51,6 +51,28 @@ It whitelists your IP, uploads `git archive HEAD`, backs up the old app and DB (
    `su -s /bin/bash gallery -c "cd /mnt/ger_hd1/www/gallery/app && php8.4 artisan gallery:user mainadmin --admin --name='Main Admin' --password-stdin" <<< '<password>'`
 6. Cron line above in `crontab -u gallery -e`.
 
+## Storage watchdog
+
+`gallery-storage-watchdog.timer` runs `/usr/local/sbin/gallery-storage-watchdog` (source: `deploy/gallery-storage-watchdog.sh`)
+every 2 minutes. If the mount is missing or does not answer in 20 s, it aborts the FUSE connection (frees every
+stuck process), remounts, and sends a Telegram message ("reconnected", or "DOWN" as critical, at most hourly).
+It never waits on the mount itself, because a hung FUSE mount blocks even `timeout ls`.
+
+```bash
+cp deploy/gallery-storage-watchdog.sh /usr/local/sbin/gallery-storage-watchdog && chmod 755 /usr/local/sbin/gallery-storage-watchdog
+cp deploy/gallery-storage-watchdog.{service,timer} /etc/systemd/system/ && systemctl daemon-reload
+systemctl enable --now gallery-storage-watchdog.timer
+journalctl -t gallery-storage-watchdog -n 20     # what it did
+```
+
+## Security / Cloudflare
+
+- `bootstrap/trusted_proxies.php` holds Cloudflare's IP ranges. If Cloudflare adds ranges
+  (<https://www.cloudflare.com/ips/>), update the list (or set `GALLERY_TRUSTED_PROXIES` in `.env`,
+  then `php8.4 artisan config:clear`). If the list is outdated, visitors from a new range are seen with a
+  Cloudflare IP: they still work, but share a login limit.
+- Failed logins are in `storage/logs/laravel-*.log` (`login failed`, `login blocked`).
+
 ## Rotate secrets
 
 - **DB password**: `ALTER USER 'gallery'@'localhost' IDENTIFIED BY '…'; ALTER USER 'gallery'@'127.0.0.1' IDENTIFIED BY '…';`
