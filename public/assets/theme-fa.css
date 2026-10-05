@@ -1,0 +1,71 @@
+/* Persian theme — "Persian Garden" (RTL): turquoise, saffron, pomegranate; arch-shaped folders, framed photos,
+   a light girih pattern; Vazirmatn font (stored locally). */
+@font-face { font-family: 'Vazirmatn'; font-display: swap; font-weight: 100 900; src: url('/vendor/fonts/Vazirmatn-wght.woff2') format('woff2'); }
+@font-face { font-family: 'Nunito'; font-display: swap; font-weight: 200 1000; src: url('/vendor/fonts/nunito-latin-wght-normal.woff2') format('woff2'); unicode-range: U+0000-00FF; }
+
+:root {
+  --font: 'Vazirmatn', 'Nunito', system-ui, Tahoma, sans-serif;
+  --girih: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%2393cfc6' stroke-opacity='.22' stroke-width='1'%3E%3Cpath d='M32 4l8 20 20 8-20 8-8 20-8-20-20-8 20-8z'/%3E%3Cpath d='M0 0l12 12M64 0L52 12M0 64l12-12M64 64L52 52'/%3E%3Ccircle cx='32' cy='32' r='5'/%3E%3C/g%3E%3C/svg%3E");
+  --bg: var(--girih), radial-gradient(1100px 600px at 100% 0%, #e3f5f1 0%, transparent 60%), radial-gradient(900px 500px at 0% 10%, #fdf1dc 0%, transparent 55%), linear-gradient(180deg, #fbf9f3, #f7f4ec);
+  --surface: #fffdf8; --surface2: #f6f3ea; --input-bg: #fffefb;
+  --text: #4f4b5c; --heading: #3d4a57; --muted: #918c9c; --link: #3e9f96;
+  --border: #ebe5d6; --border-soft: #f1ece0; --hover: #f3f8f4;
+  --primary: #5fbcb2; --primary-deep: #2f8f86; --primary-soft: #def3ef; --on-primary: #ffffff;
+  --primary-grad: linear-gradient(135deg, #6cc7bd, #8fb8e8);
+  --ring: rgba(95, 188, 178, .3); --shadow-c: rgba(120, 140, 120, .17);
+  --ok: #3f9a78; --ok-soft: #dcf3ea; --danger: #c96a72; --danger-soft: #f9e1e3; --fav: #e46f86;
+  /* palette: turquoise, saffron, pomegranate, lapis, pistachio, lavender */
+  --p0: #cfeee9; --p0d: #3fa79d; --p1: #fbe9c4; --p1d: #c8912a; --p2: #f8d8dd; --p2d: #cf6b7f;
+  --p3: #dbe4f8; --p3d: #5f7fc8; --p4: #e2f1d3; --p4d: #6f9e48; --p5: #ebe0f5; --p5d: #8f6fbe;
+  --topbar-bg: linear-gradient(90deg, rgba(222, 243, 239, .9), rgba(253, 241, 220, .9)); --topbar-shadow: 0 3px 0 rgba(95, 188, 178, .12);
+  --logo-bg: linear-gradient(135deg, #6cc7bd, #f2b56b); --logo-radius: 50% 50% 12px 12px;
+  --card-radius: 22px; --card-shadow: 0 6px 24px rgba(120, 140, 120, .09);
+  --btn-radius: 999px; --input-radius: 14px; --tool-ic-radius: 50%;
+  --tile-radius: 20px; --tile-shadow: 0 3px 12px rgba(120, 140, 120, .12); --tile-shadow-hover: 0 12px 28px rgba(120, 140, 120, .22);
+  --viewer-bg: rgba(250, 248, 241, .95); --viewer-img-radius: 16px;
+}
+body { font-size: 15.5px; }
+code, .picker-path, [dir="ltr"] { font-family: 'Nunito', ui-monospace, Consolas, monospace; }
+
+/* top bar: a colored band with a fine girih line under it */
+.theme-fa .topbar { border-bottom: 0; }
+.theme-fa .topbar::after {
+  content: ''; position: absolute; inset-inline: 0; bottom: -6px; height: 6px;
+  background: repeating-linear-gradient(90deg, var(--p0d) 0 14px, transparent 14px 18px, var(--p1d) 18px 32px, transparent 32px 36px);
+  opacity: .25; -webkit-mask: linear-gradient(transparent 2px, #000 2px 4px, transparent 4px); mask: linear-gradient(transparent 2px, #000 2px 4px, transparent 4px);
+}
+.theme-fa .navlink.active { box-shadow: inset 0 -3px 0 var(--cd); }
+
+/* page titles with a small decorative mark */
+.theme-fa .page-title::after { content: ''; flex: none; width: 46px; height: 10px; margin-inline-start: 6px; background: radial-gradient(circle, var(--p1d) 2px, transparent 3px) 0 50% / 12px 10px repeat-x; opacity: .6; }
+
+/* folders: Persian arch ("taagh") */
+.theme-fa .tile.folder { background: transparent; box-shadow: none; overflow: visible; }
+.theme-fa .tile.folder .thumb {
+  border-radius: 50% 50% var(--tile-radius) var(--tile-radius) / 34% 34% var(--tile-radius) var(--tile-radius);
+  background: var(--c); border: 3px solid var(--surface); box-shadow: var(--tile-shadow), inset 0 0 0 2px color-mix(in srgb, var(--cd) 25%, transparent);
+}
+.theme-fa .view-large .tile.folder .thumb { aspect-ratio: 4 / 3.4; }
+.theme-fa .tile.folder .thumb::before { content: ''; position: absolute; inset: 8px; border-radius: inherit; border: 1.5px dashed color-mix(in srgb, var(--cd) 35%, transparent); z-index: 1; pointer-events: none; }
+.theme-fa .tile.folder .label { background: transparent; text-align: center; padding-top: 6px; }
+.theme-fa .tile.folder:hover { transform: translateY(-3px); box-shadow: none; }
+.theme-fa .tile.folder:hover .thumb { box-shadow: var(--tile-shadow-hover); }
+
+/* photos: a light "frame" (passe-partout) */
+.theme-fa .tile.file { padding: 5px; background: var(--surface); border: 1px solid var(--border); }
+.theme-fa .view-tiny .tile.file { padding: 2px; border-radius: 10px; }
+.theme-fa .tile.file .thumb { border-radius: calc(var(--tile-radius) - 6px); }
+.theme-fa .view-tiny .tile.file .thumb { border-radius: 8px; }
+.theme-fa .tile.file .label { background: transparent; padding: 6px 6px 2px; text-align: center; }
+
+.theme-fa .rows { border-radius: 18px; }
+.theme-fa .rtable thead th { background: linear-gradient(90deg, var(--p0), var(--p1)); color: var(--heading); }
+.theme-fa .toolbar { border-radius: 999px; padding-inline: 12px; }
+@media (max-width: 760px) { .theme-fa .toolbar { border-radius: 22px; } }
+.theme-fa .tool > .ic { box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 45%, transparent); }
+.theme-fa .card.login-card { border-radius: 50% 50% 26px 26px / 110px 110px 26px 26px; padding-top: 46px; border: 3px double var(--border); }
+.theme-fa .user-card { border-top: 0; border-inline-start: 5px solid var(--c); }
+.theme-fa .tag { border-radius: 10px 999px 999px 10px; }
+.theme-fa .v-frame img { border: 6px solid #fff; }
+.theme-fa .btn.primary { box-shadow: 0 4px 0 color-mix(in srgb, var(--primary-deep) 30%, transparent), 0 6px 16px var(--shadow-c); }
+.theme-fa .polaroid { border-radius: 50% 50% 10px 10px / 30% 30% 10px 10px; }

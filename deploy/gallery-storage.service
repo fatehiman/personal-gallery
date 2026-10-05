@@ -1,0 +1,26 @@
+# Read-only SSHFS mount of the Hetzner storage box (read-only sub-account) for gallery.peppasoft.com.
+# Install: cp deploy/gallery-storage.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now gallery-storage
+# Password: /etc/gallery-storagebox.pass (root:root, 600, no newline). It is read by sshpass on every (re)connect.
+# uid/gid 1088 = the "gallery" site user on ger1.
+[Unit]
+Description=Gallery storage box (read-only SSHFS) on /mnt/gallery-storage
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/bin/mkdir -p /mnt/gallery-storage
+ExecStartPre=-/bin/fusermount3 -uz /mnt/gallery-storage
+ExecStart=/usr/bin/sshfs -f -p 23 u313450-sub10@u313450-sub10.your-storagebox.de: /mnt/gallery-storage \
+  -o ro,allow_other,default_permissions,uid=1088,gid=1088,umask=0222 \
+  -o reconnect,ServerAliveInterval=15,ServerAliveCountMax=3,ConnectTimeout=20 \
+  -o PubkeyAuthentication=no,PreferredAuthentications=password,StrictHostKeyChecking=yes \
+  -o kernel_cache,dir_cache=yes,dcache_timeout=600,max_conns=2 \
+  -o "ssh_command=sshpass -f /etc/gallery-storagebox.pass ssh"
+ExecStop=/bin/fusermount3 -u /mnt/gallery-storage
+Restart=always
+RestartSec=30
+MemoryMax=200M
+
+[Install]
+WantedBy=multi-user.target

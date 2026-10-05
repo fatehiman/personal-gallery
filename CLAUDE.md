@@ -1,0 +1,28 @@
+# Personal Gallery — notes for coding agents
+
+Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md first, DEPLOY.md for the server.
+
+## Layout
+
+- `app/Gallery/` — the core: `Paths` (all path handling, `..` refused), `Access` (virtual paths per user, access
+  checks, SQL scope), `Indexer` (directory listing → DB, never opens files), `Scanner` (the only class that reads
+  file content: EXIF/IPTC/ffprobe + WebP thumbnail), `ReadSlots` (flock semaphore: max N storage reads at once),
+  `ScanWorker` (the single scan job, time-boxed, resumable), `Geocoder` (Nominatim, 1 req/s, cached per ~1 km),
+  `Signer` (HMAC media URLs), `Presenter` (JSON for the browser), `Avatars`.
+- `routes/media.php` — signed media routes **without** the web middleware (no session, no cookies → CDN cacheable).
+- `public/assets/` — `app.js` (helpers, dates, Jalali, suggest, date picker), `gallery.js` (browser, views,
+  lazy loading, search, scan), `viewer.js` (lightbox, faces, tags), `map.js`, `admin.js`, `base.css` +
+  `theme-en.css` / `theme-fa.css`. Icons: `icons.svg` sprite (Lucide).
+- `public/vendor/` — Video.js, Leaflet, markercluster, fonts. Keep everything local (no CDN links).
+- Translations: `lang/en/ui.php`, `lang/fa/ui.php` (the same keys are sent to JS). Add every new key to both.
+
+## Rules
+
+- Never write to `GALLERY_ROOT`. Never read file content outside `Scanner`/`MediaFileController::original`.
+- Every new endpoint that takes a path or a media id must go through `Access` (`resolve`, `canAccessMedia`, `scope`).
+- Virtual paths: admin = real path; user = `<folder_access_id>/<sub path>`.
+- Dates: `file_mtime` etc. are sent as UTC ISO with `Z`; `taken_at` is camera wall-clock time without `Z`.
+- CSP has no `unsafe-inline` for scripts: no inline `<script>` code or `on…=` attributes. Config goes in the
+  `#pg-config` JSON block.
+- Keep colors light/pastel; both themes must be updated when adding UI.
+- Run `php artisan test` before committing. Deploy with `bash deploy/deploy.sh`.
