@@ -143,6 +143,31 @@ class GalleryTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_storage_outage_gives_a_clear_answer_and_deletes_nothing(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $this->actingAs($admin)->getJson('/api/list?path=A/B')->assertOk();
+        $before = [\App\Models\Directory::count(), Media::count()];
+
+        rename($this->root, $this->root.'-off'); // storage "disappears"
+        \App\Gallery\Health::forget();
+        try {
+            $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk(); // still browsable from the DB
+            $this->actingAs($admin)->getJson('/api/list?path=A/C') // never listed: needs the storage
+                ->assertStatus(503)->assertJsonPath('storage', 'down');
+            $this->actingAs($admin)->getJson('/api/health?fresh=1')->assertJsonPath('storage', 'down');
+            $m = Media::where('filename', 'photo.jpg')->firstOrFail();
+            $this->get(Signer::thumb($m))->assertStatus(503); // not marked as a broken file
+            $this->assertNull($m->refresh()->scan_error);
+            $this->assertSame($before, [\App\Models\Directory::count(), Media::count()]);
+        } finally {
+            rename($this->root.'-off', $this->root);
+            \App\Gallery\Health::forget();
+        }
+        $this->actingAs($admin)->getJson('/api/health?fresh=1')->assertJsonPath('storage', 'ok');
+    }
+
     public function test_login_in_persian_saves_persian_but_english_does_not_change_it(): void
     {
         $u = User::create(['name' => 'P', 'username' => 'pp', 'password' => 'password123', 'locale' => 'fa']);

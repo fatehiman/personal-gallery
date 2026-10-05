@@ -42,6 +42,14 @@ class ScanWorker
         if ($job->status === 'queued') {
             $job->update(['status' => 'running', 'started_at' => now(), 'state' => ['phase' => 'walk', 'dirs' => [$job->path]]]);
         }
+        if (! Health::ok(true)) {
+            $job->update(['message' => 'Storage not available, waiting']);
+
+            return; // the scheduler tries again next minute
+        }
+        if ($job->message === 'Storage not available, waiting' || $job->message === 'Storage not available, retrying') {
+            $job->update(['message' => null]);
+        }
         $slots = new ReadSlots;
 
         try {

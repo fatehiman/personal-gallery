@@ -77,8 +77,12 @@ class Paths
     }
 
     /** Stop work when the storage box is not mounted (an empty dir must not look like "everything deleted"). */
-    public static function assertAvailable(): void
+    public static function assertAvailable(bool $fresh = false): void
     {
+        // First the non-blocking health check: a frozen mount must not freeze this request.
+        if (! Health::ok($fresh)) {
+            throw new StorageUnavailableException('Storage is not available');
+        }
         $root = self::root();
         if (! is_dir($root)) {
             throw new StorageUnavailableException('Storage is not available');

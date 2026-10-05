@@ -36,8 +36,14 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+        $exceptions->dontReport([StorageUnavailableException::class]); // expected during an outage, the watchdog alerts
         $exceptions->render(fn (InvalidPathException $e) => response()->json(['message' => 'Not found'], 404));
         $exceptions->render(function (StorageUnavailableException $e, Request $request) {
-            return response()->json(['message' => __('ui.storage_unavailable')], 503);
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => __('ui.storage_unavailable'), 'storage' => 'down'], 503)
+                    ->header('Retry-After', '30');
+            }
+
+            return response(__('ui.storage_unavailable'), 503)->header('Retry-After', '30');
         });
     })->create();

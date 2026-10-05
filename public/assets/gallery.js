@@ -68,8 +68,37 @@
       if (state.mode === 'browse' && state.path === '' && !extra.append) loadOnThisDayStrip();
     } catch (e) {
       if (my !== state.seq) return;
+      if (PG.storage.isDown(e)) {
+        // Wait here; when the storage is back, load the same folder / page again (the URL did not change).
+        if (extra.append) { storageBanner(() => load(extra)); return; }
+        content.innerHTML = '<div></div>';
+        PG.storage.wait(content.firstElementChild, { onBack: () => load(extra) });
+        return;
+      }
       content.innerHTML = `<div class="empty-note">${icon('circle-help')}${esc(e.message)}</div>`;
     }
+  }
+
+  // One-line banner above the content (used when only some pictures fail). Shown once at a time.
+  let bannerEl = null;
+  function storageBanner(onBack) {
+    if (bannerEl && bannerEl.isConnected) return;
+    bannerEl = document.createElement('div');
+    content.parentNode.insertBefore(bannerEl, content);
+    PG.storage.wait(bannerEl, { banner: true, onBack: () => { bannerEl.remove(); bannerEl = null; onBack(); } });
+  }
+  // A picture failed: is the storage down? (asked at most every 10 s)
+  let lastCheck = 0, lastResult = Promise.resolve(false);
+  function storageProblem() {
+    if (bannerEl && bannerEl.isConnected) return Promise.resolve(true);
+    if (Date.now() - lastCheck > 10000) {
+      lastCheck = Date.now();
+      lastResult = PG.storage.check(false).then((ok) => {
+        if (!ok) storageBanner(() => lazy.retryFailed());
+        return !ok;
+      });
+    }
+    return lastResult;
   }
 
   // ---------------------------------------------------------------- chrome (toolbar, crumbs)
@@ -273,8 +302,12 @@
           const tries = +(img.dataset.tries || 0) + 1;
           img.dataset.tries = tries;
           img.removeAttribute('src');
-          if (tries < 3) { img.dataset.state = ''; setTimeout(() => { if (visible.has(img)) { queue.push(img); pump(); } }, 3000 * tries); }
-          else { img.dataset.state = 'failed'; img.remove(); }
+          img.dataset.state = 'failed';
+          // Storage down: keep it "failed"; the banner's Retry loads it again. Otherwise retry a few times.
+          storageProblem().then((down) => {
+            if (down || img.dataset.state !== 'failed') return;
+            if (tries < 3) { img.dataset.state = ''; setTimeout(() => { if (visible.has(img)) { queue.push(img); pump(); } }, 3000 * tries); }
+          });
         }
         pump();
       };
@@ -324,6 +357,14 @@
     return {
       observe(img) { img.dataset.obs = '1'; io.observe(img); },
       reset() { io.disconnect(); visible.clear(); queue.length = 0; },
+      // After an outage: load the pictures that failed again (same page, same scroll position).
+      retryFailed() {
+        content.querySelectorAll('img[data-state="failed"]').forEach((img) => {
+          img.dataset.state = ''; img.dataset.tries = 0;
+          if (visible.has(img)) { if (img.dataset.ready) startReady(img); else queue.push(img); }
+        });
+        pump();
+      },
     };
   })();
 

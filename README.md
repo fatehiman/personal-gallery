@@ -53,7 +53,12 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   Cloudflare. Media responses have no cookies, so the CDN can cache them.
   Note: anyone who has an exact media URL can open that file (like a "shared link"). Change `GALLERY_URL_KEY`
   to make all old media URLs invalid.
-- If the storage is not mounted, nothing is deleted from the DB (`GALLERY_REQUIRE_MOUNT=true`).
+- **When the storage is down** (not mounted, disconnected or frozen), login and all pages still work.
+  A health check (`App\Gallery\Health`) asks a separate background `ls` and waits at most 3 s, so a frozen
+  mount never freezes a request. Folders listed in the last 20 minutes and existing thumbnails still show
+  (they come from the DB and the local disk). Everything else shows a friendly message with **Retry** and an
+  automatic retry every 30 s; when the storage is back, the user continues on the same folder, scroll position
+  or photo. During an outage nothing is deleted from the DB and no file is marked as broken.
 
 ## Libraries (all stored locally in `public/vendor`, no CDN)
 

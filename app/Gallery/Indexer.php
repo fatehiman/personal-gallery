@@ -42,7 +42,12 @@ class Indexer
         Paths::assertAvailable();
         $abs = Paths::abs($rel);
         if (! is_dir($abs) || is_link($abs)) {
-            if ($dir) {
+            // Make sure the folder is really gone and the storage did not just fail in the middle.
+            // Otherwise an outage would delete its rows (and the tags / people saved on its photos).
+            Health::forget();
+            Paths::assertAvailable(true);
+            $parent = Paths::parent($rel);
+            if ($dir && ! is_link($abs) && ($parent === null || is_dir(Paths::abs($parent)))) {
                 $this->forget($rel);
             }
             throw new NotFoundHttpException;

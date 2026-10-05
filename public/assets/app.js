@@ -134,6 +134,58 @@
   };
   PG.debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
+  // ---------------------------------------------------------------- storage outage
+  /*
+   * When the photo storage does not answer, the server says {storage: "down"} (HTTP 503).
+   * PG.storage.wait() shows a friendly box with a Retry button and an automatic retry every 30 s.
+   * When the storage is back, onBack() runs, so the user continues exactly where they were.
+   */
+  PG.storage = {
+    isDown: (e) => !!(e && e.status === 503 && e.data && e.data.storage === 'down'),
+    async check(fresh) {
+      try { return (await PG.api('GET', '/api/health' + (fresh ? '?fresh=1' : ''))).storage === 'ok'; } catch (e) { return false; }
+    },
+    /** el: element to fill; opts: { onBack, banner: true for the small one-line version } */
+    wait(el, opts) {
+      const every = 30;
+      let left = every, timer = null, busy = false;
+      el.classList.add(opts.banner ? 'storage-banner' : 'storage-wait');
+      el.innerHTML = opts.banner
+        ? `${PG.icon('hard-drive')}<span class="sw-text">${PG.esc(PG.t('storage_down_banner'))}</span>
+           <small class="muted" data-sw-count></small><button type="button" class="btn small primary" data-sw-retry>${PG.icon('refresh-cw')} ${PG.esc(PG.t('retry'))}</button>`
+        : `<div class="sw-ic">${PG.icon('hard-drive')}</div><h2>${PG.esc(PG.t('storage_down_title'))}</h2>
+           <p>${PG.esc(PG.t('storage_down_text'))}</p><p class="muted small">${PG.esc(PG.t('storage_down_tell'))}</p>
+           <button type="button" class="btn primary" data-sw-retry>${PG.icon('refresh-cw')} ${PG.esc(PG.t('retry'))}</button>
+           <p class="muted small" data-sw-count></p>`;
+      const count = el.querySelector('[data-sw-count]');
+      const btn = el.querySelector('[data-sw-retry]');
+      const stop = () => { clearInterval(timer); timer = null; };
+      const tryNow = async () => {
+        if (busy) return;
+        busy = true; btn.disabled = true; count.textContent = PG.t('retrying');
+        const ok = await PG.storage.check(true);
+        busy = false; btn.disabled = false;
+        if (!el.isConnected) { stop(); return; }
+        if (ok) {
+          stop();
+          el.classList.remove('storage-banner', 'storage-wait');
+          el.innerHTML = '';
+          PG.toast(PG.icon('check') + ' ' + PG.esc(PG.t('storage_back')), { timeout: 2500 });
+          opts.onBack && opts.onBack();
+        } else { left = every; tick(); }
+      };
+      const tick = () => { count.textContent = PG.t('retry_in', { s: PG.num(left) }); };
+      btn.addEventListener('click', tryNow);
+      tick();
+      timer = setInterval(() => {
+        if (!el.isConnected) { stop(); return; }
+        if (busy) return;
+        if (--left <= 0) tryNow(); else tick();
+      }, 1000);
+      return { stop };
+    },
+  };
+
   // ---------------------------------------------------------------- toasts
   PG.toast = (html, opts = {}) => {
     const box = document.getElementById('toasts');

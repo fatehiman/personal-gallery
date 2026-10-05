@@ -37,6 +37,11 @@ class Scanner
         } catch (StorageUnavailableException $e) {
             return false; // try again later, do not mark as scanned
         } catch (Throwable $e) {
+            // A read error during an outage is not the file's fault: do not mark it, try again later.
+            Health::forget();
+            if (! Health::ok(true)) {
+                return false;
+            }
             $data['scan_error'] = mb_substr($e->getMessage(), 0, 250);
             report($e);
         }

@@ -48,6 +48,7 @@ class ScanController extends Controller
     {
         $data = $request->validate(['path' => ['nullable', 'string', 'max:2000'], 'recursive' => ['nullable', 'boolean']]);
         $path = Paths::normalize($data['path'] ?? '');
+        Paths::assertAvailable();
         abort_unless(is_dir(Paths::abs($path)), 404, __('ui.folder_not_found'));
 
         // Only one job at a time; nothing is queued behind a running job.

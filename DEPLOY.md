@@ -65,6 +65,15 @@ systemctl enable --now gallery-storage-watchdog.timer
 journalctl -t gallery-storage-watchdog -n 20     # what it did
 ```
 
+## When the storage is down
+
+Users see "Photo storage is not reachable right now" with Retry (auto retry every 30 s). The watchdog
+usually fixes it within 2–3 minutes. Manual fix: `systemctl restart gallery-storage`, then check
+`ls /mnt/gallery-storage` **in the background** (`timeout` does not help on a frozen mount):
+`(ls /mnt/gallery-storage > /tmp/ls.out 2>&1 &); sleep 5; cat /tmp/ls.out`.
+Status as the app sees it: `curl -s https://gallery.peppasoft.com/api/health` needs a login; on the server use
+`su -s /bin/bash gallery -c "cd app && php8.4 artisan tinker --execute='var_dump(App\Gallery\Health::ok(true));'"`.
+
 ## Security / Cloudflare
 
 - `bootstrap/trusted_proxies.php` holds Cloudflare's IP ranges. If Cloudflare adds ranges

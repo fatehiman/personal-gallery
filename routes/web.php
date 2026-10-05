@@ -37,6 +37,8 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
 
     Route::prefix('api')->middleware('throttle:api')->group(function () {
         Route::get('/list', [BrowseController::class, 'list']);
+        // Storage status for the "Retry" button. fresh=1 checks again (still at most every 2 s).
+        Route::get('/health', fn (\Illuminate\Http\Request $r) => response()->json(['storage' => \App\Gallery\Health::ok($r->boolean('fresh')) ? 'ok' : 'down']));
         Route::get('/search', [SearchController::class, 'search']);
         Route::get('/favorites', [SearchController::class, 'favorites']);
         Route::get('/on-this-day', [SearchController::class, 'onThisDay']);

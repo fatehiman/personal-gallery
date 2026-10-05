@@ -155,7 +155,11 @@
       const sp = slide.querySelector('.v-spinner'); if (sp) sp.remove();
       if (V && V.play) armSlideshow();
     };
-    img.onerror = () => { const sp = slide.querySelector('.v-spinner'); if (sp) sp.remove(); if (!f.thumb) noPreview(f, slide); };
+    img.onerror = () => {
+      img.style.visibility = 'hidden'; // no "broken image" icon
+      const sp = slide.querySelector('.v-spinner'); if (sp) sp.remove();
+      storageCheck(f, slide, () => { if (!f.thumb) noPreview(f, slide); });
+    };
     const go = () => { img.src = f.url; };
     if (f.thumb) {
       // The thumbnail is small (and cached). Its size gives the right shape before the original arrives.
@@ -194,11 +198,23 @@
     layout(frame);
     V.player = window.videojs(video, { language: PG.cfg.locale, controlBar: { pictureInPictureToggle: true }, playbackRates: [0.5, 1, 1.5, 2] });
     V.player.on('ended', () => { if (V && V.play) next(); });
+    V.player.on('error', () => storageCheck(f, slide, () => {}));
     V.player.on('loadedmetadata', () => {
       const vw = V && V.player && V.player.videoWidth();
       if (vw && !f.w) { frame.dataset.w = vw; frame.dataset.h = V.player.videoHeight(); layout(frame); }
     });
     layout(frame);
+  }
+
+  // The original did not load: if the storage is down, wait in the viewer and show this photo again when it is back.
+  async function storageCheck(f, slide, otherwise) {
+    const ok = await PG.storage.check(true);
+    if (!V || V.slide !== slide) return;
+    if (ok) { otherwise(); return; }
+    stopSlideshow(V);
+    const box = document.createElement('div');
+    slide.appendChild(box);
+    PG.storage.wait(box, { onBack: () => { if (V && cur() === f) show(V.index, 0); } });
   }
 
   function noPreview(f, slide) {

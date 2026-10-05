@@ -39,6 +39,9 @@ class FolderController extends Controller
         } catch (InvalidPathException) {
             throw ValidationException::withMessages(['path' => __('ui.folder_not_found')]);
         }
+        if (! \App\Gallery\Health::ok()) {
+            throw ValidationException::withMessages(['path' => __('ui.storage_unavailable')]);
+        }
         if (! is_dir(Paths::abs($path))) {
             throw ValidationException::withMessages(['path' => __('ui.folder_not_found')]);
         }
