@@ -24,6 +24,19 @@ return [
     // Images with more pixels than this get no thumbnail (GD memory limit).
     'max_pixels' => (int) env('GALLERY_MAX_PIXELS', 100_000_000),
 
+    // Videos are copied to this (local, temporary) folder before playing; the storage box is too slow to stream from.
+    'video_cache_dir' => storage_path('app/vcache'),
+    // Keep at least this much free disk space (MB) after the copy. Not enough space: the video is not copied.
+    'video_reserve_mb' => (int) env('GALLERY_VIDEO_RESERVE_MB', 3072),
+    // A copy that nobody used for this many minutes is deleted.
+    'video_cache_minutes' => (int) env('GALLERY_VIDEO_CACHE_MINUTES', 15),
+    // How many videos may be copied at the same time.
+    'video_copy_max' => (int) env('GALLERY_VIDEO_COPY_MAX', 2),
+    // Start the copy as a background process (false in tests).
+    'video_spawn' => (bool) env('GALLERY_VIDEO_SPAWN', true),
+    // PHP command line binary for the copy process (the web server runs php-fpm, so PHP_BINARY is not usable).
+    'php_bin' => env('GALLERY_PHP_BIN', 'php'.PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION),
+
     'ffmpeg' => env('FFMPEG_BIN', 'ffmpeg'),
     'ffprobe' => env('FFPROBE_BIN', 'ffprobe'),
 

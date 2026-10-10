@@ -52,6 +52,9 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
 
         Route::post('/media/hide', [HideController::class, 'hide']);
         Route::get('/media/{media}', [MediaInfoController::class, 'show'])->whereNumber('media');
+        Route::get('/media/{media}/video', [MediaInfoController::class, 'videoStatus'])->whereNumber('media');
+        Route::post('/media/{media}/video', [MediaInfoController::class, 'videoStart'])->whereNumber('media');
+        Route::delete('/media/{media}/video', [MediaInfoController::class, 'videoCancel'])->whereNumber('media');
         Route::post('/media/{media}/description', [MediaInfoController::class, 'description'])->whereNumber('media');
         Route::post('/media/{media}/rotate', [MediaInfoController::class, 'rotate'])->whereNumber('media');
         Route::post('/media/{media}/favorite', [MediaInfoController::class, 'favorite'])->whereNumber('media');

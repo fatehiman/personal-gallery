@@ -6,6 +6,7 @@ use App\Gallery\Access;
 use App\Gallery\Presenter;
 use App\Gallery\Scanner;
 use App\Gallery\Signer;
+use App\Gallery\VideoCache;
 use App\Models\Media;
 use App\Models\MediaPerson;
 use App\Models\Person;
@@ -53,6 +54,40 @@ class MediaInfoController extends Controller
         $out['path'] = $access->isAdmin() ? $m->path : null;
 
         return response()->json($out);
+    }
+
+    /** Video playback: state of the local copy (copying / ready / error). */
+    public function videoStatus(Request $request, int $media)
+    {
+        return response()->json($this->videoReply(VideoCache::status($this->video($request, $media))));
+    }
+
+    /** Start copying the video to the server (background). Checks the free disk space first. */
+    public function videoStart(Request $request, int $media)
+    {
+        return response()->json($this->videoReply(VideoCache::start($this->video($request, $media))));
+    }
+
+    public function videoCancel(Request $request, int $media)
+    {
+        return response()->json($this->videoReply(VideoCache::cancel($this->video($request, $media))));
+    }
+
+    private function video(Request $request, int $id): Media
+    {
+        $m = $this->media($request, $id);
+        abort_unless($m->type === 'video', 404);
+
+        return $m;
+    }
+
+    private function videoReply(array $st): array
+    {
+        if (isset($st['error'])) {
+            $st['message'] = __('ui.'.$st['error']);
+        }
+
+        return $st;
     }
 
     public function description(Request $request, int $media)

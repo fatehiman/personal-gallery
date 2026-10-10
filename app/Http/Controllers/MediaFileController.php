@@ -7,6 +7,7 @@ use App\Gallery\ReadSlots;
 use App\Gallery\Scanner;
 use App\Gallery\Signer;
 use App\Gallery\StorageUnavailableException;
+use App\Gallery\VideoCache;
 use App\Models\Media;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -82,6 +83,29 @@ class MediaFileController extends Controller
             'Content-Type' => 'image/webp',
             'Cache-Control' => self::YEAR,
         ]);
+    }
+
+    /** Plays the local copy of a video (with Range support). 404 when there is no copy (it was cleaned up). */
+    public function video(int $id, int $v, string $sig, string $ext)
+    {
+        if (! Signer::check('v', $id, $v, $sig)) {
+            return $this->fail(404);
+        }
+        $m = Media::find($id);
+        $file = $m && $m->thumb_v === $v && Signer::ext($m) === $ext && $m->type === 'video' ? VideoCache::readyFile($m) : null;
+        if (! $file) {
+            return $this->fail(404);
+        }
+        @touch($file); // in use
+        @set_time_limit(0);
+        session_write_close();
+        $r = new BinaryFileResponse($file, 200, [
+            'Content-Type' => self::MIME[$m->ext] ?? 'application/octet-stream',
+            'Cache-Control' => 'private, max-age=0',
+        ], false, null, false, false);
+        $r->setAutoEtag(false);
+
+        return $r;
     }
 
     public function original(string $mode, int $id, int $v, string $sig, string $ext)

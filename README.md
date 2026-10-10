@@ -38,6 +38,15 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   as 0..1 coordinates, ready for automatic face detection later. Name lists suggest existing names after 500 ms of no
   typing, and match any part of a name (`ja` finds `Mrs. Janet Jackson`).
 - **Videos**: first frame as thumbnail (ffmpeg), playback with Video.js, duration, codec, GPS from phone videos.
+  The storage box is too slow to stream from, so a video is **first copied to this server** (`storage/app/vcache`) and
+  played from the local copy. While copying, the viewer shows a progress ring with the size (`140/290 MB`, `0.3/1.2 GB`),
+  the video length (HH:MM) and a **Cancel** button. Leaving the video (next/previous/close) also cancels the copy.
+  - The copy runs in a background process (`gallery:copy-video`), in 4 MB pieces, each piece through a read slot.
+  - **Free disk space is checked first**: the file size + a reserve (`GALLERY_VIDEO_RESERVE_MB`, default 3072) must fit.
+    Old unused copies are removed first if that helps; if there is still not enough space, nothing is copied and the
+    user sees an error. At most `GALLERY_VIDEO_COPY_MAX` (2) copies run at the same time.
+  - A copy that nobody used for `GALLERY_VIDEO_CACHE_MINUTES` (15) minutes is deleted (`gallery:video-clean`, every 5 min).
+    Playing keeps the copy alive. If the copy is gone while the video is paused, it is copied again once.
 - **Delete** (all users): a trash button in the viewer, and the **Select** mode (mark items, then *Delete selected*).
   There is no delete icon on the thumbnails. A simple confirmation is asked, then the item disappears at once (no reload). For the user it is a permanent delete.
   In fact the file is only **hidden for everybody** (`media.hidden_at`, `hidden_by`); nothing is changed on the storage
@@ -151,6 +160,8 @@ Useful commands:
 | `gallery:work` | run the active scan job for ~55 s (the scheduler starts it every minute) |
 | `gallery:geocode` | find city/country names for photos with GPS (1 request per second) |
 | `gallery:crawl [--budget=20]` | background scan: walk folders, read new files, for a few seconds (scheduler: every 3 min) |
+| `gallery:copy-video <id>` | copy one video to the local temporary folder (started by the web app) |
+| `gallery:video-clean [--minutes=]` | delete local video copies that were not used for a while (scheduler: every 5 min) |
 | `gallery:otd-telegram [--force]` | send today's "On this day" memories to Telegram (scheduler: daily 19:00 IRST) |
 
 Tests: `php artisan test`.

@@ -365,6 +365,17 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 [dir="rtl"] .v-nav .ic { transform: scaleX(-1); }
 .v-nopreview { text-align: center; padding: 30px; background: var(--surface); border-radius: var(--card-radius); max-width: 360px; }
 .v-nopreview .ic { width: 60px; height: 60px; color: var(--p0d); display: block; margin: 0 auto 10px; }
+.v-copy { position: absolute; inset: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #fff; background: rgba(20, 28, 45, .55); }
+.v-copy .ring { position: relative; width: 150px; height: 150px; }
+.v-copy .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.v-copy .ring circle { fill: none; stroke-width: 7; }
+.v-copy .ring-bg { stroke: rgba(255, 255, 255, .25); }
+.v-copy .ring-fg { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset .6s linear; }
+.v-copy .ring-text { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 22px; font-size: .95rem; direction: ltr; }
+.v-copy-meta { display: flex; gap: 14px; align-items: center; opacity: .9; }
+.v-copy-meta .ic { width: 16px; height: 16px; vertical-align: -3px; }
+.v-copy-msg { text-align: center; max-width: 320px; background: var(--surface); color: var(--text); padding: 22px; border-radius: var(--card-radius); }
+.v-copy-msg .ic { width: 44px; height: 44px; color: var(--p0d); }
 .v-spinner { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; color: var(--primary); }
 .v-spinner .ic { width: 40px; height: 40px; }
 .v-slidebar { position: absolute; bottom: 0; inset-inline: 0; height: 3px; background: var(--primary-grad); transform-origin: left; transform: scaleX(0); z-index: 5; }

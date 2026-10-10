@@ -299,4 +299,12 @@ return [
     'selected_n' => ':n selected',
     'select_all' => 'Select all',
     'delete_selected' => 'Delete selected',
+    'video_copying' => 'Copying the video to the server…',
+    'video_cancelled' => 'Copy cancelled.',
+    'video_retry' => 'Try again',
+    'video_no_space' => 'Not enough free disk space on the server to play this video.',
+    'video_busy' => 'The server is busy copying other videos. Try again in a minute.',
+    'video_missing' => 'The video file was not found.',
+    'video_failed' => 'The video could not be copied. Try again.',
+    'video_storage' => 'The storage is not available now. Try again later.',
 ];

@@ -100,3 +100,6 @@ The map uses OpenStreetMap tiles. Their servers block requests without a `Refere
   Both are slow network storage boxes.
 - Do not set `GALLERY_REQUIRE_MOUNT=false` on the server: if the mount is down, an empty folder would look like
   "all files deleted".
+
+- **Video copies**: `GALLERY_PHP_BIN` (default `php8.4` here) is the command used to start the copy process. Copies go to
+  `storage/app/vcache` (on the same disk as the app: keep several GB free; see `GALLERY_VIDEO_RESERVE_MB`).

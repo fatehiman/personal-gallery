@@ -37,7 +37,7 @@ class FeaturesTest extends TestCase
 
     protected function tearDown(): void
     {
-        foreach ([$this->root, $this->root.'-thumbs'] as $dir) {
+        foreach ([$this->root, $this->root.'-thumbs', $this->root.'-vcache'] as $dir) {
             if (is_dir($dir)) {
                 $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
                 foreach ($it as $f) {
@@ -326,5 +326,59 @@ class FeaturesTest extends TestCase
 
         $admin = $this->user(true);
         $this->actingAs($admin)->get('/admin/scans')->assertOk()->assertSee('round finished');
+    }
+
+    private function videoSetup(): Media
+    {
+        file_put_contents($this->root.'/E/clip.mp4', random_bytes(3 * 1024 * 1024 + 123));
+        config(['gallery.video_cache_dir' => $this->root.'-vcache', 'gallery.video_reserve_mb' => 0, 'gallery.video_spawn' => false]);
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=E')->assertOk();
+
+        return Media::where('filename', 'clip.mp4')->firstOrFail();
+    }
+
+    public function test_video_is_copied_to_the_local_folder_and_played_from_there(): void
+    {
+        $m = $this->videoSetup();
+        $admin = User::where('is_admin', true)->first();
+        $this->actingAs($admin)->getJson("/api/media/{$m->id}/video")->assertJsonPath('state', 'none');
+        $this->actingAs($admin)->postJson("/api/media/{$m->id}/video")->assertOk()->assertJsonPath('total', $m->size);
+
+        $this->assertTrue(\App\Gallery\VideoCache::run($m)); // the background process does this
+        $r = $this->actingAs($admin)->getJson("/api/media/{$m->id}/video")->assertJsonPath('state', 'ready');
+        $url = $r->json('url');
+        $this->assertSame(file_get_contents($this->root.'/E/clip.mp4'), file_get_contents(\App\Gallery\VideoCache::readyFile($m)));
+        $this->get($url)->assertOk();
+        $this->get($url, ['Range' => 'bytes=0-99'])->assertStatus(206);
+        $this->get($url.'x')->assertNotFound();
+
+        // not used for a while: deleted
+        touch(\App\Gallery\VideoCache::readyFile($m), time() - 3600);
+        $this->assertSame(1, \App\Gallery\VideoCache::clean(15));
+        $this->get($url)->assertNotFound();
+        $this->actingAs($admin)->getJson("/api/media/{$m->id}/video")->assertJsonPath('state', 'none');
+    }
+
+    public function test_video_is_not_copied_without_free_disk_space(): void
+    {
+        $m = $this->videoSetup();
+        config(['gallery.video_reserve_mb' => 999_999_999]); // more than any disk has
+        $admin = User::where('is_admin', true)->first();
+        $this->actingAs($admin)->postJson("/api/media/{$m->id}/video")->assertOk()
+            ->assertJsonPath('state', 'error')->assertJsonPath('error', 'video_no_space');
+        $this->assertFalse(\App\Gallery\VideoCache::run($m));
+        $this->assertNull(\App\Gallery\VideoCache::readyFile($m));
+        $this->assertSame([], glob($this->root.'-vcache/*.part') ?: []);
+    }
+
+    public function test_video_copy_can_be_cancelled_and_needs_access(): void
+    {
+        $m = $this->videoSetup();
+        $u = $this->user();
+        FolderAccess::create(['user_id' => $u->id, 'title' => 'A only', 'path' => 'A']);
+        $this->flushSession();
+        $this->actingAs($u)->postJson("/api/media/{$m->id}/video")->assertNotFound();
+        $this->actingAs($u)->getJson('/m/v/'.$m->id.'/1/aaaaaaaaaaaaaaaaaaaaaa.mp4')->assertNotFound();
     }
 }
