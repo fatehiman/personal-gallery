@@ -38,6 +38,14 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   as 0..1 coordinates, ready for automatic face detection later. Name lists suggest existing names after 500 ms of no
   typing, and match any part of a name (`ja` finds `Mrs. Janet Jackson`).
 - **Videos**: first frame as thumbnail (ffmpeg), playback with Video.js, duration, codec, GPS from phone videos.
+- **Delete** (all users): a red cross on photos and videos (on hover) and on folders, and a trash button in the viewer.
+  A simple confirmation is asked, then the item disappears at once (no reload). For the user it is a permanent delete.
+  In fact the file is only **hidden for everybody** (`media.hidden_at`, `hidden_by`); nothing is changed on the storage
+  box. Later the main admin will be able to delete the hidden files for real. The **Select** button lets users mark
+  several photos, videos and folders (a folder means all its photos and videos, also in sub folders) and delete them
+  together. Select and the delete icons are not shown in the two smallest views (Mosaic, Small tiles).
+- **Empty folders are not shown** (for everybody): a folder that was read and has no sub folder and no visible photo or
+  video. A folder that was never read is shown until it is known. A folder that has only empty sub folders is still shown.
 - **Favorites**, **On this day** (photos taken on today's date in past years, only from **flagged folders**), **Map** of photos with GPS
   (Leaflet + marker clusters; city and country names in English and Persian from OpenStreetMap Nominatim).
 - **Profile**: change name, password, language, calendar and profile picture. Without a picture, one is looked up by
@@ -65,8 +73,11 @@ It goes through all folders in a fixed order (depth first, by name) and remember
 - For each folder it makes **one `stat` call**. If the folder date is the same as in the DB, nothing was added or
   removed, and it goes on to the next folder at once.
 - If the date changed (or the folder was never listed) it reads the listing, and reads (scan: EXIF + thumbnail) the
-  files that were never read. If the time is over, it continues in the same folder 3 minutes later.
+  files that were never read. A file with the same path and the same **size in bytes** is never read again, even when
+  its date changed (only a different size triggers a new read). If the time is over, it continues in the same folder 3 minutes later.
 - At the end of the tree it starts again from the first folder. After the first rounds it only finds new files and folders.
+- Every run writes **one line** to the log (`crawl_logs`), shown on *Scan jobs* (last 300 runs; lines older than 10 days
+  are deleted): time, seconds, from/to folder, folders checked, new files, files read, errors, result.
 - It pauses while an admin scan job runs. It uses the same read slots (max 2 reads at once) as everything else.
 
 ## Time zones

@@ -13,6 +13,12 @@ class Media extends Model
 
     protected $guarded = ['id'];
 
+    // Files that users "deleted" are only hidden (hidden_at). Every normal query skips them.
+    protected static function booted(): void
+    {
+        static::addGlobalScope('visible', fn ($q) => $q->whereNull('media.hidden_at'));
+    }
+
     /** Columns needed for listings (everything except the large "exif" JSON). */
     public const LIST_COLUMNS = ['id', 'directory_id', 'path', 'filename', 'ext', 'type', 'size', 'file_mtime', 'file_ctime',
         'scanned_at', 'scan_error', 'width', 'height', 'taken_at', 'camera_make', 'camera_model', 'duration', 'gps_lat', 'gps_lng',
@@ -25,6 +31,7 @@ class Media extends Model
             'file_ctime' => 'datetime',
             'scanned_at' => 'datetime',
             'taken_at' => 'datetime',
+            'hidden_at' => 'datetime',
             'exif' => 'array',
             'has_thumb' => 'boolean',
             'flash' => 'boolean',

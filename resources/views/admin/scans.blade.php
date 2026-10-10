@@ -33,5 +33,37 @@
             </div>
         @endif
     </div>
+
+    <h2 class="section-h">@include('partials.icon', ['i' => 'clock']) {{ __('ui.crawl_log') }}</h2>
+    <p class="muted small">{{ __('ui.crawl_log_hint') }}</p>
+    <div class="card table-card">
+        @if ($logs->isEmpty())
+            <p class="muted">{{ __('ui.crawl_log_empty') }}</p>
+        @else
+            <div class="table-scroll">
+                <table class="table">
+                    <thead><tr>
+                        <th>{{ __('ui.started') }}</th><th>{{ __('ui.crawl_secs') }}</th><th>{{ __('ui.crawl_from_to') }}</th>
+                        <th>{{ __('ui.crawl_folders') }}</th><th>{{ __('ui.crawl_new') }}</th><th>{{ __('ui.crawl_read') }}</th>
+                        <th>{{ __('ui.errors') }}</th><th>{{ __('ui.crawl_note') }}</th>
+                    </tr></thead>
+                    <tbody>
+                    @foreach ($logs as $l)
+                        <tr>
+                            <td><time data-dt="{{ \Illuminate\Support\Carbon::parse($l->started_at, 'UTC')->toIso8601ZuluString() }}"></time></td>
+                            <td>{{ $l->seconds }}</td>
+                            <td dir="ltr"><code>/{{ $l->from_path }}</code>@if ($l->to_path !== $l->from_path) → <code>/{{ $l->to_path }}</code>@endif</td>
+                            <td>{{ $l->folders }} <small class="muted">({{ $l->listed }})</small></td>
+                            <td>{{ $l->new_files }}</td>
+                            <td>{{ $l->scanned }}</td>
+                            <td>{{ $l->errors }}</td>
+                            <td><small class="muted">{{ $l->note }}</small></td>
+                        </tr>
+                    @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </div>
 </div>
 @endsection

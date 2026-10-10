@@ -24,6 +24,26 @@ class Directory extends Model
         return static::where('path_hash', static::hashPath($path))->first();
     }
 
+    /**
+     * Drop folders that are known to be empty: listed, no sub folder and no visible image or video.
+     * A folder that was never listed is kept (we do not know yet).
+     *
+     * @param  \Illuminate\Support\Collection<int, self>  $dirs
+     */
+    public static function withoutEmpty($dirs)
+    {
+        $check = $dirs->filter(fn ($d) => $d->listed_at && (int) $d->dir_count === 0);
+        if ($check->isEmpty()) {
+            return $dirs;
+        }
+        $has = Media::whereIn('directory_id', $check->pluck('id'))->whereIn('type', ['image', 'video'])
+            ->distinct()->pluck('directory_id')->flip();
+
+        $checked = $check->pluck('id')->flip();
+
+        return $dirs->reject(fn ($d) => $checked->has($d->id) && ! $has->has($d->id))->values();
+    }
+
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);

@@ -5,6 +5,7 @@ namespace App\Gallery;
 use App\Models\Directory;
 use App\Models\Media;
 use App\Models\ScanJob;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
@@ -13,11 +14,18 @@ use Throwable;
  * It goes through all folders in a fixed order (depth first, by name) and remembers where it stopped.
  * In each folder it first checks the folder date (one stat call). Only when the date changed (or the folder
  * was never listed) it reads the listing again, and it reads (scans) the files that were never read.
+ * A file with the same path and size is never read again, whatever its date says (see Indexer).
  * At the end of the tree it starts again from the beginning. So after the first rounds it only finds new files.
+ * Every run writes one line to crawl_logs (kept 10 days).
  */
 class Crawler
 {
     public const POS = 'crawl_pos';
+
+    public const LOG_DAYS = 10;
+
+    /** @var array{folders:int, listed:int, scanned:int, errors:int} */
+    private array $stats;
 
     public function __construct(private Indexer $indexer, private Scanner $scanner) {}
 
@@ -33,10 +41,44 @@ class Crawler
 
     public function run(?int $budget = null): void
     {
-        if (! self::enabled() || ScanJob::active() || ! Health::ok(true)) {
-            return; // an admin scan job is running: it does the same work, do not read twice
+        if (! self::enabled()) {
+            return;
         }
-        $end = time() + ($budget ?? self::seconds());
+        $t0 = microtime(true);
+        $from = (string) Settings::get(self::POS, '');
+        $filesBefore = Media::withoutGlobalScopes()->count();
+        $this->stats = ['folders' => 0, 'listed' => 0, 'scanned' => 0, 'errors' => 0];
+        $note = null;
+        try {
+            $note = $this->walk($budget ?? self::seconds());
+        } catch (Throwable $e) {
+            report($e);
+            $note = 'error: '.mb_substr($e->getMessage(), 0, 120);
+            $this->stats['errors']++;
+        }
+        $to = (string) Settings::get(self::POS, '');
+        DB::table('crawl_logs')->insert([
+            'started_at' => now()->subSeconds((int) round(microtime(true) - $t0)),
+            'seconds' => round(microtime(true) - $t0, 1),
+            'from_path' => $from, 'to_path' => $to,
+            'folders' => $this->stats['folders'], 'listed' => $this->stats['listed'],
+            'new_files' => max(0, Media::withoutGlobalScopes()->count() - $filesBefore),
+            'scanned' => $this->stats['scanned'], 'errors' => $this->stats['errors'],
+            'note' => $note,
+        ]);
+        DB::table('crawl_logs')->where('started_at', '<', now()->subDays(self::LOG_DAYS))->delete();
+    }
+
+    /** @return string why it stopped */
+    private function walk(int $budget): string
+    {
+        if (ScanJob::active()) {
+            return 'paused: admin scan is running'; // it does the same work, do not read twice
+        }
+        if (! Health::ok(true)) {
+            return 'storage not available';
+        }
+        $end = time() + $budget;
         $slots = new ReadSlots;
         $pos = (string) Settings::get(self::POS, '');
 
@@ -45,29 +87,32 @@ class Crawler
                 $dir = $this->open($pos);
                 if (! $dir) {
                     if ($pos === '') {
-                        return; // root is not readable
+                        return 'root folder not readable';
                     }
                     $pos = ''; // the folder was removed: start from the beginning
                     Settings::set(self::POS, $pos);
 
                     continue;
                 }
+                $this->stats['folders']++;
                 $pending = Media::where('directory_id', $dir->id)->whereNull('scanned_at')->whereIn('type', ['image', 'video']);
                 while (time() < $end && ($m = (clone $pending)->orderBy('filename')->first())) {
                     if (! $slots->acquire(20)) {
-                        return;
+                        return 'read slots busy';
                     }
                     try {
-                        $this->scanner->scan($m);
+                        $ok = $this->scanner->scan($m);
                     } finally {
                         $slots->release();
                     }
                     if ($m->scanned_at === null) {
-                        return; // storage not available: same folder again next time
+                        return 'storage not available'; // same folder again next time
                     }
+                    $this->stats['scanned']++;
+                    $ok || $this->stats['errors']++;
                 }
                 if ((clone $pending)->exists()) {
-                    return; // time is over, continue in this folder next time
+                    return 'time over, same folder next time';
                 }
                 $next = $this->next($dir);
                 if ($next === null) {
@@ -75,15 +120,15 @@ class Crawler
                     Settings::set('crawl_cycle_at', now()->toIso8601String());
                     Settings::set(self::POS, '');
 
-                    return; // one round finished; the next run starts a new round
+                    return 'round finished, starts again from the first folder';
                 }
                 $pos = $next;
                 Settings::set(self::POS, $pos);
             }
+
+            return 'time over';
         } catch (StorageUnavailableException) {
-            return;
-        } catch (Throwable $e) {
-            report($e);
+            return 'storage not available';
         } finally {
             $slots->release();
         }
@@ -99,6 +144,7 @@ class Crawler
             if ($dir && $st && $dir->listed_at && $dir->mtime && $dir->mtime->timestamp === $st['mtime']) {
                 return $dir; // nothing was added or removed here
             }
+            $this->stats['listed']++;
 
             return $this->indexer->sync($path, true);
         } catch (NotFoundHttpException) {

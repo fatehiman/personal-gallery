@@ -245,4 +245,86 @@ class FeaturesTest extends TestCase
         $this->assertSame('size', $u->refresh()->pref('sort'));
         $this->assertTrue($u->pref('flat'));
     }
+
+    public function test_same_size_is_never_read_again_but_a_new_size_is(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=E')->assertOk();
+        $m = Media::where('filename', 'other.jpg')->firstOrFail();
+        app(\App\Gallery\Scanner::class)->scan($m);
+        $this->assertNotNull($m->refresh()->scanned_at);
+
+        touch($this->root.'/E/other.jpg', time() + 100); // only the date changes
+        app(\App\Gallery\Indexer::class)->sync('E', true);
+        $m->refresh();
+        $this->assertNotNull($m->scanned_at);
+        $this->assertTrue($m->has_thumb);
+        $this->assertSame(time() + 100, $m->file_mtime->timestamp);
+
+        file_put_contents($this->root.'/E/other.jpg', 'x', FILE_APPEND); // size changes
+        app(\App\Gallery\Indexer::class)->sync('E', true);
+        $this->assertNull($m->refresh()->scanned_at);
+    }
+
+    public function test_hide_by_id_and_by_folder_is_immediate_and_respects_access(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $top = Media::where('filename', 'top.jpg')->firstOrFail();
+        $other = Media::where('filename', 'other.jpg')->first();
+
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Mine', 'path' => 'A']);
+        $this->flushSession();
+        $this->actingAs($u)->postJson('/api/media/hide', ['ids' => [$top->id]])->assertOk()->assertJsonPath('hidden', 1);
+        $this->actingAs($u)->getJson('/api/list?path='.$fa->id)->assertJsonCount(0, 'files');
+        $this->actingAs($u)->getJson('/api/media/'.$top->id)->assertNotFound();
+        $this->assertSame($u->id, (int) \DB::table('media')->where('id', $top->id)->value('hidden_by'));
+        // a relisting does not bring it back
+        app(\App\Gallery\Indexer::class)->sync('A', true);
+        $this->actingAs($u)->getJson('/api/list?path='.$fa->id)->assertJsonCount(0, 'files');
+        $this->assertSame(1, \DB::table('media')->where('path', 'A/top.jpg')->count());
+
+        // folder: also lists sub folders that were never read, then hides everything below
+        $this->actingAs($u)->postJson('/api/media/hide', ['paths' => [$fa->id.'/B']])->assertOk()->assertJsonPath('hidden', 2);
+        $this->assertSame(0, Media::where('path', 'like', 'A/B/%')->count());
+        $this->actingAs($u)->postJson('/api/media/hide', ['paths' => ['']])->assertStatus(422);
+        $this->actingAs($u)->postJson('/api/media/hide', ['paths' => ['77/B']])->assertNotFound();
+        if ($other) {
+            $this->actingAs($u)->postJson('/api/media/hide', ['ids' => [$other->id]])->assertJsonPath('hidden', 0);
+        }
+    }
+
+    public function test_empty_folders_are_not_listed(): void
+    {
+        mkdir($this->root.'/Empty/Inner', 0777, true);
+        mkdir($this->root.'/OnlyOther', 0777, true);
+        file_put_contents($this->root.'/OnlyOther/notes.txt', 'x');
+        $admin = $this->user(true);
+        $r = $this->actingAs($admin)->getJson('/api/list?path=')->assertOk();
+        $names = array_column($r->json('folders'), 'name');
+        $this->assertContains('Empty', $names); // not listed yet: unknown, still shown
+        $this->actingAs($admin)->getJson('/api/list?path=Empty')->assertOk();
+        $this->actingAs($admin)->getJson('/api/list?path=Empty/Inner')->assertOk();
+        $this->actingAs($admin)->getJson('/api/list?path=OnlyOther')->assertOk();
+        $names = array_column($this->actingAs($admin)->getJson('/api/list?path=')->json('folders'), 'name');
+        $this->assertNotContains('OnlyOther', $names);
+        $this->assertContains('A', $names);
+        $this->assertContains('Empty', $names); // has a sub folder (which is empty itself)
+        $this->assertSame([], $this->actingAs($admin)->getJson('/api/list?path=Empty')->json('folders'));
+    }
+
+    public function test_crawler_writes_one_log_line_per_run_and_prunes_old_ones(): void
+    {
+        \DB::table('crawl_logs')->insert(['started_at' => now()->subDays(11), 'note' => 'old']);
+        app(Crawler::class)->run(15);
+        $this->assertSame(1, \DB::table('crawl_logs')->count());
+        $log = \DB::table('crawl_logs')->first();
+        $this->assertSame(4, (int) $log->new_files);
+        $this->assertSame(4, (int) $log->scanned);
+        $this->assertStringContainsString('round finished', $log->note);
+
+        $admin = $this->user(true);
+        $this->actingAs($admin)->get('/admin/scans')->assertOk()->assertSee('round finished');
+    }
 }

@@ -15,7 +15,7 @@
   const state = {
     mode: root.dataset.mode, path: '', data: null, items: [], files: [], shown: 0,
     view: VIEWS.includes(PG.pref('view')) ? PG.pref('view') : 'medium',
-    sort: PG.pref('sort', 'date_desc'), flat: !!PG.pref('flat', false), page: 0, scan: null, seq: 0,
+    sort: PG.pref('sort', 'date_desc'), flat: !!PG.pref('flat', false), page: 0, scan: null, seq: 0, selecting: false, sel: new Set(),
   };
 
   // ---------------------------------------------------------------- URL <-> state
@@ -47,6 +47,7 @@
     const my = ++state.seq;
     lazy.reset();
     if (!extra.append) {
+      setSelecting(false);
       state.page = 0;
       content.innerHTML = `<div class="loading-note">${icon('loader-circle', 'spin')} ${esc(t('loading'))}</div>`;
     }
@@ -108,6 +109,10 @@
     root.querySelector('[data-act="up"]').disabled = !(browse && state.path !== '');
     root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse || state.flat));
     root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || state.flat || (!isAdmin && state.path === '')));
+    const small = state.view === 'tiny' || state.view === 'small'; // no room for select / delete icons on thumbnails
+    const sb = root.querySelector('.select-btn');
+    sb.hidden = small || (state.mode === 'browse' && state.path === '' && !isAdmin && !state.flat);
+    if (small && state.selecting) setSelecting(false);
     const fb = root.querySelector('.flat-btn');
     fb.hidden = !browse;
     fb.classList.toggle('on', state.flat);
@@ -219,6 +224,16 @@
     return `<button type="button" class="${state.view === 'list' || state.view === 'details' ? 'icon-btn' : 'scan-mini'}" data-scan-path="${esc(it.path)}" data-name="${esc(it.name)}" title="${esc(run ? t('stop_scan') : t('scan'))}">${icon(run ? 'circle-stop' : 'scan-search')}</button>`;
   };
 
+  // Delete (really: hide, but the user must believe it is a delete) and select marks.
+  const selKey = (it) => (it.kind === 'folder' ? 'd:' + it.path : 'f:' + it.id);
+  const selCls = (it) => (state.sel.has(selKey(it)) ? 'selected' : '');
+  const selBox = () => `<span class="sel-box">${icon('check')}</span>`;
+  const delBtn = (it) => {
+    if (state.mode !== 'browse' && it.kind === 'folder') return '';
+    const attr = it.kind === 'folder' ? `data-del-path="${esc(it.path)}"` : `data-del-id="${it.id}"`;
+    return `<span role="button" tabindex="0" class="del-x" ${attr} title="${esc(t('delete'))}" aria-label="${esc(t('delete'))}">${icon('x')}</span>`;
+  };
+
   // "On this day" flag of a folder (all users). Shown on hover; filled when the folder is flagged.
   const otdBtn = (it) => {
     if (it.kind !== 'folder' || state.mode !== 'browse') return '';
@@ -231,8 +246,8 @@
       const cover = it.cover ? `<img class="cover" data-src="${esc(it.cover)}" data-ready="1" alt="">` : '';
       const count = it.count != null ? `<span class="count">${PG.num(it.count)}</span>` : '';
       const sub = state.mode === 'search' && it.parentName ? esc(it.parentName) : it.mtime ? PG.dateHtml(it.mtime, false) : '&nbsp;';
-      return `<a class="tile folder ${color(i)}" href="${browseUrl(it.path)}" data-nav="${esc(it.path)}">
-        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}
+      return `<a class="tile folder ${color(i)} ${selCls(it)}" href="${browseUrl(it.path)}" data-nav="${esc(it.path)}">
+        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}${selBox()}${delBtn(it)}
         <div class="label">${esc(it.name)}<small>${sub}</small></div></a>`;
     }
     const fi = it.fi;
@@ -245,8 +260,8 @@
     const sub = state.mode === 'search' || state.mode === 'favorites' || state.mode === 'onthisday' || flat()
       ? esc(it.folderName || '') : PG.dateHtml(it.taken || it.mtime, false);
     // A description replaces the file name on the tile (one line, cut with "…").
-    return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
-      <div class="thumb">${ph}${img}${play}${ext}</div><div class="badge-row">${badges}</div>
+    return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''} ${selCls(it)}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
+      <div class="thumb">${ph}${img}${play}${ext}</div>${selBox()}${delBtn(it)}<div class="badge-row">${badges}</div>
       <div class="label"><span class="lbl" dir="${PG.textDir(it.desc || it.name)}">${esc(it.desc || it.name)}</span><small>${sub}</small></div></button>`;
   }
 
@@ -257,25 +272,25 @@
   }
 
   function rowHtml(it, i) {
-    const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}</td>`;
+    const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}${delBtn(it)}</td>`;
     if (it.kind === 'folder') {
-      const nm = `<div class="nm ${color(i)}">${icon('folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
+      const nm = `<div class="nm ${color(i)}">${selBox()}${icon('folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
       const cnt = it.count != null ? esc(t('items', { n: PG.num(it.count) })) : '';
-      if (state.view === 'list') return `<tr data-nav-row="${esc(it.path)}"><td>${nm}</td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>${admin}</tr>`;
-      return `<tr data-nav-row="${esc(it.path)}"><td>${nm}</td><td></td><td></td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td><td></td><td></td><td></td><td></td>${admin}</tr>`;
+      if (state.view === 'list') return `<tr class="${selCls(it)}" data-nav-row="${esc(it.path)}"><td>${nm}</td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>${admin}</tr>`;
+      return `<tr class="${selCls(it)}" data-nav-row="${esc(it.path)}"><td>${nm}</td><td></td><td></td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td><td></td><td></td><td></td><td></td>${admin}</tr>`;
     }
     const fi = it.fi;
     if (state.view === 'list') {
-      return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td></tr>`;
+      return `<tr class="${selCls(it)}" data-file="${fi}" id="f${it.id}"><td><div class="nm">${selBox()}${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td class="act">${delBtn(it)}</td></tr>`;
     }
     // Details: a small thumbnail only when it already exists (no storage read).
     const th = it.thumb && it.ready ? `<img data-src="${esc(it.thumb)}" data-ready="1" alt="">` : icon(typeIcon(it));
     const dim = it.w ? `<span dir="ltr">${PG.digits(it.w + '×' + it.h)}</span>` : it.scanned ? '' : `<small class="muted">${esc(t('not_scanned'))}</small>`;
     const loc = [it.city, it.country].filter(Boolean).join(PG.fa ? '، ' : ', ');
     const chips = (a) => `<div class="tg">${(a || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>`;
-    return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${th}<span>${esc(it.name)}</span></div></td>
+    return `<tr class="${selCls(it)}" data-file="${fi}" id="f${it.id}"><td><div class="nm">${selBox()}${th}<span>${esc(it.name)}</span></div></td>
       <td class="dt">${PG.dateHtml(it.taken)}</td><td class="num">${dim}</td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>
-      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td><td></td></tr>`;
+      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td><td class="act">${delBtn(it)}</td></tr>`;
   }
 
   // ---------------------------------------------------------------- lazy loading
@@ -413,6 +428,89 @@
     PG.setPref('sort', s);
     if (state.mode === 'search' || flat()) load(); else if (state.data) render();
   }
+  // ---------------------------------------------------------------- select + delete
+  const selBar = document.getElementById('selbar');
+  function setSelecting(on) {
+    state.selecting = on;
+    if (!on) state.sel.clear();
+    root.classList.toggle('selecting', on);
+    root.querySelector('.select-btn').classList.toggle('on', on);
+    content.querySelectorAll('.selected').forEach((el) => el.classList.remove('selected'));
+    updateSelBar();
+  }
+  function updateSelBar() {
+    selBar.hidden = !state.selecting;
+    selBar.querySelector('[data-sel-count]').textContent = t('selected_n', { n: PG.num(state.sel.size) });
+    selBar.querySelector('[data-act="sel-delete"]').disabled = !state.sel.size;
+  }
+  function toggleSel(target) {
+    const file = target.closest('[data-file]'), folder = target.closest('[data-nav], [data-nav-row]');
+    const el = file || folder;
+    const key = file ? 'f:' + (file.id || '').slice(1) : folder ? 'd:' + (folder.dataset.nav || folder.dataset.navRow) : null;
+    if (!key) return;
+    state.sel.has(key) ? state.sel.delete(key) : state.sel.add(key);
+    el.classList.toggle('selected', state.sel.has(key));
+    updateSelBar();
+  }
+  function selectAll() {
+    state.items.forEach((it) => state.sel.add(selKey(it)));
+    content.querySelectorAll('.tile, tr[data-file], tr[data-nav-row]').forEach((el) => el.classList.add('selected'));
+    updateSelBar();
+  }
+  function confirmDelete(n) {
+    return new Promise((resolve) => {
+      const dlg = document.createElement('dialog');
+      dlg.className = 'modal';
+      dlg.innerHTML = `<div class="modal-head"><b class="del-title">${icon('x')} ${esc(t('delete'))}</b></div>
+        <div style="padding:16px"><p>${esc(n === 1 ? t('delete_confirm_one') : t('delete_confirm_n', { n: PG.num(n) }))}</p></div>
+        <div class="modal-foot"><button class="btn ghost" type="button" data-no>${esc(t('cancel'))}</button><button class="btn danger" type="button" data-yes>${icon('x')} ${esc(t('delete'))}</button></div>`;
+      document.body.appendChild(dlg);
+      let ok = false;
+      dlg.addEventListener('close', () => { dlg.remove(); resolve(ok); });
+      dlg.querySelector('[data-no]').onclick = () => dlg.close();
+      dlg.querySelector('[data-yes]').onclick = () => { ok = true; dlg.close(); };
+      dlg.showModal();
+    });
+  }
+  // Removes the deleted files / folders from the page at once (no reload, the scroll position stays).
+  function removeItems(ids, paths) {
+    const idset = new Set(ids), pset = new Set(paths);
+    state.data.files = (state.data.files || []).filter((f) => !idset.has(f.id));
+    state.data.folders = (state.data.folders || []).filter((f) => !pset.has(f.path));
+    for (let k = state.files.length - 1; k >= 0; k--) if (idset.has(state.files[k].id)) state.files.splice(k, 1); // same array the viewer uses
+    state.files.forEach((f, k) => (f.fi = k));
+    const before = state.items.length;
+    state.items = state.items.filter((it) => (it.kind === 'file' ? !idset.has(it.id) : !pset.has(it.path)));
+    const byId = new Map(state.files.map((f) => [f.id, f.fi]));
+    let gone = 0;
+    content.querySelectorAll('[data-file]').forEach((el) => {
+      const id = +el.id.slice(1);
+      if (idset.has(id)) { el.remove(); gone++; } else if (byId.has(id)) el.dataset.file = byId.get(id);
+    });
+    content.querySelectorAll('[data-nav], [data-nav-row]').forEach((el) => {
+      if (pset.has(el.dataset.nav || el.dataset.navRow)) { el.remove(); gone++; }
+    });
+    state.shown = Math.max(0, state.shown - gone);
+    ids.forEach((id) => state.sel.delete('f:' + id));
+    paths.forEach((p) => state.sel.delete('d:' + p));
+    updateSelBar();
+    if (before && !state.items.length) render();
+  }
+  async function deleteItems(ids, paths) {
+    if (!(await confirmDelete(ids.length + paths.length))) return false;
+    try {
+      const r = await PG.api('POST', '/api/media/hide', { ids, paths });
+      removeItems(ids, paths);
+      PG.toast(icon('check') + ' ' + esc(t('deleted_n', { n: PG.num(r.hidden) })));
+      if (state.selecting && !state.sel.size) setSelecting(false);
+      return true;
+    } catch (e) { PG.error(e); return false; }
+  }
+  const selectedItems = () => ({
+    ids: [...state.sel].filter((k) => k[0] === 'f').map((k) => +k.slice(2)),
+    paths: [...state.sel].filter((k) => k[0] === 'd').map((k) => k.slice(2)),
+  });
+
   function setFlat(on) {
     state.flat = on;
     PG.setPref('flat', on);
@@ -532,6 +630,13 @@
 
   // ---------------------------------------------------------------- events
   root.addEventListener('click', (e) => {
+    const delB = e.target.closest('[data-del-id], [data-del-path]');
+    if (delB) {
+      e.preventDefault(); e.stopPropagation();
+      deleteItems(delB.dataset.delId ? [+delB.dataset.delId] : [], delB.dataset.delPath ? [delB.dataset.delPath] : []);
+      return;
+    }
+    if (state.selecting && e.target.closest('.tile, tr[data-file], tr[data-nav-row]')) { e.preventDefault(); e.stopPropagation(); toggleSel(e.target); return; }
     const otdB = e.target.closest('[data-otd-path]');
     if (otdB) { e.preventDefault(); e.stopPropagation(); toggleOtd(otdB); return; }
     const scanB = e.target.closest('[data-scan-path]');
@@ -552,6 +657,10 @@
     if (a === 'up' && state.path !== '') go(browseUrl(state.data && state.data.parent != null ? state.data.parent : ''));
     else if (a === 'search') toggleSearch();
     else if (a === 'flat') setFlat(!state.flat);
+    else if (a === 'select') setSelecting(!state.selecting);
+    else if (a === 'sel-cancel') setSelecting(false);
+    else if (a === 'sel-all') selectAll();
+    else if (a === 'sel-delete') { const s = selectedItems(); if (s.ids.length || s.paths.length) deleteItems(s.ids, s.paths); }
     else if (a === 'refresh') load({ refresh: true });
     else if (a === 'scan') scanClick(state.path, (state.data && state.data.crumbs.slice(-1)[0] || { name: '/' }).name);
     else if (a === 'more') { act.closest('.more-wrap').remove(); state.page++; load({ append: true }); }
@@ -583,6 +692,7 @@
         }
       },
       onFolder(path) { go(browseUrl(path), true); },
+      onDelete(f) { return deleteItems([f.id], []); },
     });
   }
 

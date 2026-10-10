@@ -25,6 +25,7 @@
         <div class="tb-group tb-end">
             <button class="tool c2" type="button" data-act="search" title="{{ __('ui.search') }}" aria-expanded="false">@include('partials.icon', ['i' => 'search'])<span>{{ __('ui.search') }}</span></button>
             <button class="tool c0 flat-btn" type="button" data-act="flat" title="{{ __('ui.folderless_hint') }}" aria-pressed="false">@include('partials.icon', ['i' => 'images'])<span>{{ __('ui.folderless') }}</span></button>
+            <button class="tool c4 select-btn" type="button" data-act="select" title="{{ __('ui.select_hint') }}">@include('partials.icon', ['i' => 'check'])<span>{{ __('ui.select') }}</span></button>
             <div class="dropdown">
                 <button class="tool c3" type="button" data-dd="sort" title="{{ __('ui.sort') }}">@include('partials.icon', ['i' => 'arrow-up-down'])<span>{{ __('ui.sort') }}</span></button>
                 <div class="dd-menu" data-dd-menu="sort">
@@ -81,6 +82,13 @@
             <button type="reset" class="btn ghost small">{{ __('ui.clear') }}</button>
         </div>
     </form>
+
+    <div class="selbar card" id="selbar" hidden>
+        <b data-sel-count></b>
+        <button type="button" class="btn small ghost" data-act="sel-all">{{ __('ui.select_all') }}</button>
+        <button type="button" class="btn small danger" data-act="sel-delete" disabled>@include('partials.icon', ['i' => 'x']) {{ __('ui.delete_selected') }}</button>
+        <button type="button" class="btn small ghost" data-act="sel-cancel">{{ __('ui.cancel') }}</button>
+    </div>
 
     @if (auth()->user()->is_admin)
         <div class="scanbar card" id="scanbar" hidden>

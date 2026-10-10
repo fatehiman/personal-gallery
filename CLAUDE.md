@@ -20,6 +20,9 @@ Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md fi
 
 ## Rules
 
+- `Media` has a global scope that hides deleted files (`hidden_at`). Use `withoutGlobalScopes()` only in `Indexer` (so hidden
+  rows are kept and do not come back) and in future admin tools. "Delete" by users = hide (`HideController`).
+- A file is read again only when its **size** changes; a changed date never triggers a re-scan.
 - Never write to `GALLERY_ROOT`. Never read file content outside `Scanner`/`MediaFileController::original`
   (one more exception: `TelegramDigest` uploads the files it sends, through `ReadSlots`).
 - Every new endpoint that takes a path or a media id must go through `Access` (`resolve`, `canAccessMedia`, `scope`).

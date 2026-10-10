@@ -128,7 +128,8 @@ class Indexer
 
     private function syncFiles(Directory $dir, string $rel, array $files): void
     {
-        $existing = Media::where('directory_id', $dir->id)
+        // Hidden (deleted by users) rows stay in the table, so a hidden file does not come back.
+        $existing = Media::withoutGlobalScopes()->where('directory_id', $dir->id)
             ->get(['id', 'filename', 'size', 'file_mtime', 'has_thumb', 'thumb_v'])
             ->keyBy('filename');
         $insert = [];
@@ -153,10 +154,15 @@ class Indexer
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
-            } elseif ((int) $row->size !== (int) $st['size'] || $row->file_mtime?->timestamp !== $st['mtime']) {
-                // File was replaced: read it again on next view.
+            } elseif ((int) $row->size === (int) $st['size']) {
+                // Same path, same name, same size: it is the same file. A changed date alone never triggers a new read.
+                if ($row->file_mtime?->timestamp !== $st['mtime']) {
+                    Media::withoutGlobalScopes()->whereKey($row->id)->update(['file_mtime' => $mtime]);
+                }
+            } else {
+                // Size changed: the file was replaced, read it again on next view.
                 @unlink($row->thumbFile());
-                Media::whereKey($row->id)->update([
+                Media::withoutGlobalScopes()->whereKey($row->id)->update([
                     'size' => $st['size'], 'file_mtime' => $mtime,
                     'scanned_at' => null, 'scan_error' => null, 'has_thumb' => false,
                     'thumb_v' => $row->thumb_v + 1, 'updated_at' => $now,
@@ -171,7 +177,7 @@ class Indexer
             @unlink($row->thumbFile());
         }
         if ($gone->isNotEmpty()) {
-            Media::whereIn('id', $gone->pluck('id'))->delete();
+            Media::withoutGlobalScopes()->whereIn('id', $gone->pluck('id'))->delete();
         }
     }
 
@@ -194,14 +200,14 @@ class Indexer
     {
         $like = Paths::like($rel).'/%';
         $dirIds = Directory::where('path', $rel)->orWhere('path', 'like', $like)->pluck('id');
-        Media::whereIn('directory_id', $dirIds)->where('has_thumb', true)->select('id')
+        Media::withoutGlobalScopes()->whereIn('directory_id', $dirIds)->where('has_thumb', true)->select('id')
             ->chunkById(500, function ($rows) {
                 foreach ($rows as $m) {
                     @unlink($m->thumbFile());
                 }
             });
         foreach ($dirIds->chunk(500) as $ids) {
-            Media::whereIn('directory_id', $ids)->delete();
+            Media::withoutGlobalScopes()->whereIn('directory_id', $ids)->delete();
             Directory::whereIn('id', $ids)->delete();
         }
     }

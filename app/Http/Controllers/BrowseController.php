@@ -68,7 +68,7 @@ class BrowseController extends Controller
         $known = $request->boolean('refresh') ? Directory::findByPath($r['real']) : null;
         $force = $request->boolean('refresh') && ! ($known?->listed_at && $known->listed_at->gt(now()->subSeconds(30)));
         $dir = $indexer->sync($r['real'], $force);
-        $subdirs = Directory::where('parent_id', $dir->id)->get();
+        $subdirs = Directory::withoutEmpty(Directory::where('parent_id', $dir->id)->get());
         $covers = $subdirs->isEmpty() ? collect() : Media::whereIn('id', Media::query()
             ->selectRaw('min(id)')->whereIn('directory_id', $subdirs->pluck('id'))->where('has_thumb', true)->groupBy('directory_id'))
             ->get(['id', 'directory_id', 'thumb_v'])->keyBy('directory_id');

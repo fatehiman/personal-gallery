@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BrowseController;
+use App\Http\Controllers\HideController;
 use App\Http\Controllers\MediaInfoController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
@@ -49,6 +50,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::post('/otd-folder', [SearchController::class, 'flagFolder']);
         Route::post('/prefs', [ProfileController::class, 'prefs']);
 
+        Route::post('/media/hide', [HideController::class, 'hide']);
         Route::get('/media/{media}', [MediaInfoController::class, 'show'])->whereNumber('media');
         Route::post('/media/{media}/description', [MediaInfoController::class, 'description'])->whereNumber('media');
         Route::post('/media/{media}/rotate', [MediaInfoController::class, 'rotate'])->whereNumber('media');

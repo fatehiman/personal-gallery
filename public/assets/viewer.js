@@ -28,6 +28,7 @@
           <select class="v-int" data-v-int title="${esc(t('slideshow_speed'))}">${[3, 5, 10].map((n) => `<option value="${n}" ${n === +PG.pref('slide_interval', 5) ? 'selected' : ''}>${PG.digits(n)}s</option>`).join('')}</select>
           <button class="icon-btn" data-v="panel" title="${esc(t('info'))}">${icon('info')}</button>
           <a class="icon-btn" data-v="dl" title="${esc(t('download'))}" download>${icon('download')}</a>
+          <button class="icon-btn v-del" data-v="del" title="${esc(t('delete'))}" ${opts.onDelete ? '' : 'hidden'}>${icon('trash-2')}</button>
           <button class="icon-btn" data-v="fs" title="${esc(t('fullscreen'))}">${icon('maximize')}</button>
         </div>
         <div class="v-stage">
@@ -390,6 +391,10 @@
     else if (a === 'panel') { V.panelOpen = !V.panelOpen; header(f); setTimeout(() => layout(), 30); }
     else if (a === 'fs') { if (document.fullscreenElement) document.exitFullscreen(); else V.el.requestFullscreen && V.el.requestFullscreen().catch(() => {}); }
     else if (a === 'play') toggleSlideshow();
+    else if (a === 'del') {
+      if (!V.opts.onDelete || !(await V.opts.onDelete(f)) || !V) return; // the gallery already removed it from V.files
+      if (!V.files.length) close(); else show(Math.min(V.index, V.files.length - 1), 1);
+    }
     else if (a === 'face') { setDrawing(!V.drawing); if (!V.panelOpen) action('panel'); }
     else if (a === 'fav') {
       try {

@@ -33,7 +33,10 @@ class ScanController extends Controller
 
     public function index()
     {
-        return view('admin.scans', ['jobs' => ScanJob::with('user')->latest('id')->limit(50)->get()]);
+        return view('admin.scans', [
+            'jobs' => ScanJob::with('user')->latest('id')->limit(50)->get(),
+            'logs' => DB::table('crawl_logs')->orderByDesc('id')->limit(300)->get(),
+        ]);
     }
 
     public function status()

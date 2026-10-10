@@ -146,7 +146,7 @@ class SearchController extends Controller
         $out = $this->files($this->sort($q, $data['sort'] ?? null), $access, $request);
         $out['folders'] = [];
         if ($terms && ! $filtered && (int) $request->query('page', 0) === 0) {
-            $out['folders'] = $dirs->orderBy('name')->limit(100)->get()
+            $out['folders'] = Directory::withoutEmpty($dirs->orderBy('name')->limit(100)->get())
                 ->map(function ($d) use ($access) {
                     $v = $access->toVirtual($d->path);
                     $crumbs = $v === null ? [] : $access->crumbs($v);
