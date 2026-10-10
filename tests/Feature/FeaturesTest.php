@@ -1,0 +1,248 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Gallery\Crawler;
+use App\Gallery\OtdFolders;
+use App\Gallery\Settings;
+use App\Gallery\TelegramDigest;
+use App\Models\Directory;
+use App\Models\FolderAccess;
+use App\Models\Media;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
+use Tests\TestCase;
+
+class FeaturesTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private string $root;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->root = sys_get_temp_dir().'/pg-feat-'.uniqid();
+        foreach (['A/B/C', 'A/D', 'E'] as $d) {
+            mkdir($this->root.'/'.$d, 0777, true);
+        }
+        $img = imagecreatetruecolor(100, 80);
+        foreach (['A/B/C/deep.jpg', 'A/B/mid.jpg', 'A/top.jpg', 'E/other.jpg'] as $f) {
+            imagejpeg($img, $this->root.'/'.$f);
+        }
+        config(['gallery.root' => $this->root, 'gallery.thumb_dir' => $this->root.'-thumbs', 'gallery.url_key' => 'test']);
+        Settings::reset();
+    }
+
+    protected function tearDown(): void
+    {
+        foreach ([$this->root, $this->root.'-thumbs'] as $dir) {
+            if (is_dir($dir)) {
+                $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
+                foreach ($it as $f) {
+                    $f->isDir() ? rmdir($f) : unlink($f);
+                }
+                rmdir($dir);
+            }
+        }
+        Settings::reset();
+        parent::tearDown();
+    }
+
+    private function user(bool $admin = false): User
+    {
+        return User::create(['name' => 'U', 'username' => 'u'.uniqid(), 'password' => 'password123', 'is_admin' => $admin]);
+    }
+
+    public function test_otd_flags_are_recursive_and_always_overwrite_children(): void
+    {
+        $u = $this->user();
+        $f = OtdFolders::for($u);
+        $this->assertFalse($f->effective('A/B'));
+
+        $f->set('A', true);
+        $this->assertTrue($f->effective('A/B/C'));
+        $this->assertFalse($f->effective('E'));
+
+        $f->set('A/B', false); // un-flag a sub folder: its children follow
+        $this->assertTrue($f->effective('A'));
+        $this->assertTrue($f->effective('A/D'));
+        $this->assertFalse($f->effective('A/B'));
+        $this->assertFalse($f->effective('A/B/C'));
+
+        $f->set('A/B/C', true); // flag again deeper
+        $this->assertTrue($f->effective('A/B/C'));
+        $this->assertFalse($f->effective('A/B'));
+
+        $f->set('A', false); // un-flag the parent: everything below is un-flagged, old flags are gone
+        $this->assertFalse($f->effective('A/D'));
+        $this->assertFalse($f->effective('A/B/C'));
+        $this->assertSame(0, \DB::table('otd_folders')->count());
+
+        $f->set('A/B/C', true);
+        $f->set('A', true); // flag the parent: the old override below is overwritten
+        $this->assertTrue($f->effective('A/B/C'));
+        $this->assertSame(1, \DB::table('otd_folders')->count());
+    }
+
+    public function test_otd_scope_follows_the_nearest_flag(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/folderless?path=')->assertOk();
+        foreach (['A', 'A/B', 'A/B/C'] as $p) {
+            $this->actingAs($admin)->getJson('/api/list?path='.$p)->assertOk();
+        }
+        $f = OtdFolders::for($admin);
+        $names = fn () => $f->scope(Media::query(), 'media.path')->orderBy('filename')->pluck('filename')->all();
+
+        $this->assertSame([], $names());
+        $f->set('A', true);
+        $f->set('A/B', false);
+        $f->set('A/B/C', true);
+        $this->assertSame(['deep.jpg', 'top.jpg'], $names());
+    }
+
+    public function test_on_this_day_is_empty_until_a_folder_is_flagged(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $today = Carbon::now($admin->tz());
+        Media::where('filename', 'top.jpg')->update(['taken_at' => $today->copy()->subYears(2)->format('Y-m-d 10:00:00')]);
+
+        $this->actingAs($admin)->getJson('/api/on-this-day')->assertOk()->assertJsonCount(0, 'files');
+        $this->actingAs($admin)->postJson('/api/otd-folder', ['path' => 'A', 'on' => true])->assertOk()->assertJsonPath('on', true);
+        $this->actingAs($admin)->getJson('/api/on-this-day')->assertJsonCount(1, 'files')->assertJsonPath('files.0.name', 'top.jpg');
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertJsonPath('folders.0.otd', true);
+        $this->actingAs($admin)->postJson('/api/otd-folder', ['path' => 'A', 'on' => false])->assertJsonPath('on', false);
+        $this->actingAs($admin)->getJson('/api/on-this-day')->assertJsonCount(0, 'files');
+    }
+
+    public function test_user_can_flag_only_inside_their_folders(): void
+    {
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Mine', 'path' => 'A']);
+        $this->actingAs($u)->postJson('/api/otd-folder', ['path' => $fa->id.'/B', 'on' => true])->assertOk();
+        $this->assertSame('A/B', \DB::table('otd_folders')->where('user_id', $u->id)->value('path'));
+        $this->actingAs($u)->postJson('/api/otd-folder', ['path' => '', 'on' => true])->assertStatus(422);
+        $this->actingAs($u)->postJson('/api/otd-folder', ['path' => '99/B', 'on' => true])->assertNotFound();
+    }
+
+    public function test_folderless_lists_all_known_files_below_a_folder(): void
+    {
+        $admin = $this->user(true);
+        $crawler = app(Crawler::class);
+        $crawler->run(10);
+        $r = $this->actingAs($admin)->getJson('/api/folderless?path=A/B')->assertOk();
+        $this->assertEqualsCanonicalizing(['deep.jpg', 'mid.jpg'], array_column($r->json('files'), 'name'));
+        $this->assertSame(0, $r->json('unlisted'));
+
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Mine', 'path' => 'A']);
+        $this->flushSession(); // new browser for the second user
+        $r = $this->actingAs($u)->getJson('/api/folderless?path='.$fa->id)->assertOk();
+        $this->assertCount(3, $r->json('files'));
+        $this->actingAs($u)->getJson('/api/folderless?path=')->assertOk()->assertJsonCount(3, 'files'); // never E
+    }
+
+    public function test_crawler_walks_all_folders_scans_files_and_starts_again(): void
+    {
+        $this->assertSame(0, Media::whereNotNull('scanned_at')->count());
+        app(Crawler::class)->run(15);
+        $this->assertSame(4, Media::whereNotNull('scanned_at')->count());
+        $this->assertSame(6, Directory::count()); // root, A, A/B, A/B/C, A/D, E
+        $this->assertSame(1, Settings::int('crawl_cycles', 0));
+        $this->assertSame('', (string) Settings::get(Crawler::POS, ''));
+
+        // A new file in a folder that was already walked is found in the next round (the folder date changed).
+        sleep(1);
+        imagejpeg(imagecreatetruecolor(50, 50), $this->root.'/E/new.jpg');
+        touch($this->root.'/E', time() + 5);
+        app(Crawler::class)->run(15);
+        $this->assertTrue((bool) Media::where('filename', 'new.jpg')->whereNotNull('scanned_at')->exists());
+        $this->assertSame(2, Settings::int('crawl_cycles', 0));
+    }
+
+    public function test_crawler_stops_when_time_is_over_and_continues_in_the_same_place(): void
+    {
+        app(Crawler::class)->run(0);
+        $this->assertSame(0, Media::whereNotNull('scanned_at')->count());
+        app(Crawler::class)->run(15);
+        $this->assertSame(4, Media::whereNotNull('scanned_at')->count());
+    }
+
+    public function test_crawler_waits_for_an_active_admin_scan(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->postJson('/api/admin/scan', ['path' => 'A'])->assertOk();
+        app(Crawler::class)->run(10);
+        $this->assertSame(0, Directory::count());
+    }
+
+    public function test_settings_are_admin_only_and_the_token_is_stored_encrypted(): void
+    {
+        $this->actingAs($this->user())->get('/admin/settings')->assertForbidden();
+        $admin = $this->user(true);
+        $this->flushSession();
+        $token = '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+        $this->actingAs($admin)->post('/admin/settings', [
+            'telegram_enabled' => 1, 'telegram_token' => $token, 'telegram_chat' => '-1001234567890',
+            'otd_min_years' => 2, 'otd_max_images' => 7, 'otd_max_videos' => 3, 'crawl_seconds' => 20, 'crawl_enabled' => 1,
+        ])->assertSessionHasNoErrors();
+        Settings::reset();
+        $this->assertSame($token, Settings::get('telegram_token'));
+        $this->assertStringNotContainsString('AAAAAAAA', (string) \DB::table('settings')->where('key', 'telegram_token')->value('value'));
+        $this->assertTrue(TelegramDigest::configured());
+        $this->actingAs($admin)->get('/admin/settings')->assertOk()->assertDontSee($token, false);
+        // empty token field keeps the saved token
+        $this->actingAs($admin)->post('/admin/settings', [
+            'telegram_chat' => '-1001234567890', 'otd_min_years' => 2, 'otd_max_images' => 7, 'otd_max_videos' => 3, 'crawl_seconds' => 20,
+        ])->assertSessionHasNoErrors();
+        Settings::reset();
+        $this->assertSame($token, Settings::get('telegram_token'));
+        $this->assertFalse(TelegramDigest::configured()); // not enabled any more
+    }
+
+    public function test_telegram_digest_picks_flagged_old_files_and_skips_big_videos(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $d = Directory::findByPath('A');
+        $day = Carbon::now(config('app.display_timezone'));
+        $mk = fn (string $name, string $type, int $size, int $yearsAgo) => Media::create([
+            'directory_id' => $d->id, 'path_hash' => sha1('A/'.$name), 'path' => 'A/'.$name, 'filename' => $name, 'ext' => $type === 'video' ? 'mp4' : 'jpg',
+            'type' => $type, 'size' => $size, 'taken_at' => $day->copy()->subYears($yearsAgo)->format('Y-m-d 12:00:00'),
+        ]);
+        $mk('old.jpg', 'image', 1000, 3);
+        $mk('recent.jpg', 'image', 1000, 1);
+        $mk('small.mp4', 'video', 1000, 3);
+        $mk('big.mp4', 'video', 80 * 1024 * 1024, 3);
+        Settings::set('otd_min_years', 2);
+        Settings::set('otd_max_images', 10);
+        Settings::set('otd_max_videos', 10);
+
+        $this->assertTrue(app(TelegramDigest::class)->pick($day)['images']->isEmpty()); // nothing flagged
+        OtdFolders::for($admin)->set('A', true);
+        $p = app(TelegramDigest::class)->pick($day);
+        $this->assertSame(['old.jpg'], $p['images']->pluck('filename')->all());
+        $this->assertSame(['small.mp4'], $p['videos']->pluck('filename')->all());
+    }
+
+    public function test_user_time_zone_falls_back_to_the_project_zone(): void
+    {
+        $u = $this->user();
+        $this->assertSame('Asia/Tehran', $u->tz());
+        $u->update(['timezone' => 'Europe/Berlin']);
+        $this->assertSame('Europe/Berlin', $u->refresh()->tz());
+        $u->update(['timezone' => 'Nope/Zone']);
+        $this->assertSame('Asia/Tehran', $u->refresh()->tz());
+    }
+
+    public function test_default_sort_is_newest_first_and_prefs_are_saved_on_the_user(): void
+    {
+        $u = $this->user();
+        $this->actingAs($u)->postJson('/api/prefs', ['sort' => 'size', 'flat' => true])->assertOk();
+        $this->assertSame('size', $u->refresh()->pref('sort'));
+        $this->assertTrue($u->pref('flat'));
+    }
+}

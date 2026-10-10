@@ -51,6 +51,7 @@
                 if ($user->is_admin) {
                     $links[] = ['admin.users.index', 'users', 'users', 'admin.users.*'];
                     $links[] = ['admin.scans', 'scan-search', 'scan_jobs', 'admin.scans'];
+                    $links[] = ['admin.settings', 'settings', 'settings', 'admin.settings'];
                 }
             @endphp
             @foreach ($links as [$route, $icon, $label, $pattern])

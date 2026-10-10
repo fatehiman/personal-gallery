@@ -15,7 +15,7 @@
   const state = {
     mode: root.dataset.mode, path: '', data: null, items: [], files: [], shown: 0,
     view: VIEWS.includes(PG.pref('view')) ? PG.pref('view') : 'medium',
-    sort: PG.pref('sort', 'name'), page: 0, scan: null, seq: 0,
+    sort: PG.pref('sort', 'date_desc'), flat: !!PG.pref('flat', false), page: 0, scan: null, seq: 0,
   };
 
   // ---------------------------------------------------------------- URL <-> state
@@ -52,7 +52,8 @@
     }
     updateChrome();
     let url;
-    if (state.mode === 'browse') url = '/api/list?path=' + encodeURIComponent(state.path) + (extra.refresh ? '&refresh=1' : '');
+    if (state.mode === 'browse' && state.flat) url = '/api/folderless?' + new URLSearchParams({ path: state.path, sort: state.sort, page: state.page });
+    else if (state.mode === 'browse') url = '/api/list?path=' + encodeURIComponent(state.path) + (extra.refresh ? '&refresh=1' : '');
     else if (state.mode === 'favorites') url = '/api/favorites?page=' + state.page;
     else if (state.mode === 'onthisday') url = '/api/on-this-day?page=' + state.page;
     else url = '/api/search?' + new URLSearchParams({ ...state.search, sort: state.sort, page: state.page });
@@ -65,7 +66,7 @@
       } else state.data = data;
       if (data.scan !== undefined) setScan(data.scan);
       render();
-      if (state.mode === 'browse' && state.path === '' && !extra.append) loadOnThisDayStrip();
+      if (state.mode === 'browse' && state.path === '' && !state.flat && !extra.append) loadOnThisDayStrip();
     } catch (e) {
       if (my !== state.seq) return;
       if (PG.storage.isDown(e)) {
@@ -105,8 +106,12 @@
   function updateChrome() {
     const browse = state.mode === 'browse';
     root.querySelector('[data-act="up"]').disabled = !(browse && state.path !== '');
-    root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse));
-    root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || (!isAdmin && state.path === '')));
+    root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse || state.flat));
+    root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || state.flat || (!isAdmin && state.path === '')));
+    const fb = root.querySelector('.flat-btn');
+    fb.hidden = !browse;
+    fb.classList.toggle('on', state.flat);
+    fb.setAttribute('aria-pressed', state.flat ? 'true' : 'false');
     document.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === state.sort));
     document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
     const vi = root.querySelector('.view-ic use');
@@ -150,7 +155,8 @@
   function render() {
     const d = state.data;
     const folders = sortList(d.folders || [], true).map((f) => ({ ...f, kind: 'folder' }));
-    state.files = state.mode === 'search' ? d.files.slice() : sortList(d.files || [], false);
+    // Search and Folderless are sorted by the server (the list comes in pages).
+    state.files = state.mode === 'search' || flat() ? d.files.slice() : sortList(d.files || [], false);
     state.items = folders.concat(state.files.map((f) => ({ ...f, kind: 'file' })));
     state.files = state.items.filter((i) => i.kind === 'file');
     state.files.forEach((f, k) => (f.fi = k));
@@ -159,13 +165,14 @@
     updateChrome();
 
     if (!state.items.length) {
-      const msg = state.mode === 'browse' ? (state.path === '' && !isAdmin ? t('no_folders') : t('empty_folder'))
-        : state.mode === 'favorites' ? t('favorites_empty') : state.mode === 'onthisday' ? t('on_this_day_empty') : t('no_results');
+      const msg = state.mode === 'browse' ? (state.path === '' && !isAdmin && !flat() ? t('no_folders') : t('empty_folder'))
+        : state.mode === 'favorites' ? t('favorites_empty') : state.mode === 'onthisday' ? t('on_this_day_none') + ' ' + t('on_this_day_empty') : t('no_results');
       const ic = { favorites: 'heart', onthisday: 'history', search: 'search' }[state.mode] || 'folder-open';
       content.innerHTML = `<div class="strip-slot"></div><div class="empty-note">${icon(ic)}${esc(msg)}</div>`;
       return;
     }
     let head = '<div class="strip-slot"></div>';
+    if (flat()) head += flatNote();
     if (state.mode === 'search') {
       const nf = folders.length, nfi = state.files.length;
       head += `<p class="muted small">${icon('info')} ${esc(t('search_note'))} — ${PG.num(nf)} ${esc(t('folders_found'))}, ${PG.num(nfi)}${d.more ? '+' : ''} ${esc(t('files_found'))}</p>`;
@@ -179,6 +186,12 @@
     if (d.more) content.insertAdjacentHTML('beforeend', `<div class="more-wrap"><button class="btn" type="button" data-act="more">${esc(t('load_more'))}</button></div>`);
     sentinelObs.observe(content.querySelector('.sentinel'));
   }
+
+  const flat = () => state.mode === 'browse' && state.flat;
+  const flatNote = () => {
+    const d = state.data || {};
+    return `<p class="muted small flat-note">${icon('info')} ${esc(d.unlisted ? t('folderless_note', { n: PG.num(d.unlisted) }) : t('folderless_note_all'))}</p>`;
+  };
 
   function appendChunk() {
     const end = Math.min(state.items.length, state.shown + CHUNK);
@@ -206,13 +219,20 @@
     return `<button type="button" class="${state.view === 'list' || state.view === 'details' ? 'icon-btn' : 'scan-mini'}" data-scan-path="${esc(it.path)}" data-name="${esc(it.name)}" title="${esc(run ? t('stop_scan') : t('scan'))}">${icon(run ? 'circle-stop' : 'scan-search')}</button>`;
   };
 
+  // "On this day" flag of a folder (all users). Shown on hover; filled when the folder is flagged.
+  const otdBtn = (it) => {
+    if (it.kind !== 'folder' || state.mode !== 'browse') return '';
+    const cls = state.view === 'list' || state.view === 'details' ? 'icon-btn otd-btn' : 'otd-mini';
+    return `<button type="button" class="${cls} ${it.otd ? 'on' : ''}" data-otd-path="${esc(it.path)}" aria-pressed="${it.otd ? 'true' : 'false'}" title="${esc(it.otd ? t('otd_unflag') : t('otd_flag'))}">${icon('history')}</button>`;
+  };
+
   function tileHtml(it, i) {
     if (it.kind === 'folder') {
       const cover = it.cover ? `<img class="cover" data-src="${esc(it.cover)}" data-ready="1" alt="">` : '';
       const count = it.count != null ? `<span class="count">${PG.num(it.count)}</span>` : '';
       const sub = state.mode === 'search' && it.parentName ? esc(it.parentName) : it.mtime ? PG.dateHtml(it.mtime, false) : '&nbsp;';
       return `<a class="tile folder ${color(i)}" href="${browseUrl(it.path)}" data-nav="${esc(it.path)}">
-        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}
+        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}
         <div class="label">${esc(it.name)}<small>${sub}</small></div></a>`;
     }
     const fi = it.fi;
@@ -222,7 +242,7 @@
       + (it.type === 'video' && it.duration ? `<span class="badge">${PG.duration(it.duration)}</span>` : '');
     const play = it.type === 'video' ? `<span class="play-ov"><span>${icon('play')}</span></span>` : '';
     const ext = !it.thumb || it.type === 'other' ? `<span class="ext">${esc(it.ext)}</span>` : '';
-    const sub = state.mode === 'search' || state.mode === 'favorites' || state.mode === 'onthisday'
+    const sub = state.mode === 'search' || state.mode === 'favorites' || state.mode === 'onthisday' || flat()
       ? esc(it.folderName || '') : PG.dateHtml(it.taken || it.mtime, false);
     // A description replaces the file name on the tile (one line, cut with "…").
     return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
@@ -232,12 +252,12 @@
 
   function tableHead() {
     const c = (k, label, cls = '') => `<th data-sort-col="${k}" class="${cls}">${esc(label)}</th>`;
-    if (state.view === 'list') return `<tr>${c('name', t('name'))}${c('size', t('size'), 'num')}${c('date', t('modified'))}${isAdmin ? '<th></th>' : ''}</tr>`;
-    return `<tr>${c('name', t('name'))}${c('date', t('taken'))}<th>${esc(t('dimensions'))}</th>${c('size', t('size'), 'num')}${c('date', t('modified'))}<th>${esc(t('camera'))}</th><th>${esc(t('location'))}</th><th>${esc(t('tags'))}</th><th>${esc(t('persons'))}</th><th>${esc(t('description'))}</th>${isAdmin ? '<th></th>' : ''}</tr>`;
+    if (state.view === 'list') return `<tr>${c('name', t('name'))}${c('size', t('size'), 'num')}${c('date', t('modified'))}<th></th></tr>`;
+    return `<tr>${c('name', t('name'))}${c('date', t('taken'))}<th>${esc(t('dimensions'))}</th>${c('size', t('size'), 'num')}${c('date', t('modified'))}<th>${esc(t('camera'))}</th><th>${esc(t('location'))}</th><th>${esc(t('tags'))}</th><th>${esc(t('persons'))}</th><th>${esc(t('description'))}</th><th></th></tr>`;
   }
 
   function rowHtml(it, i) {
-    const admin = isAdmin ? `<td class="act">${scanBtn(it)}</td>` : '';
+    const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}</td>`;
     if (it.kind === 'folder') {
       const nm = `<div class="nm ${color(i)}">${icon('folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
       const cnt = it.count != null ? esc(t('items', { n: PG.num(it.count) })) : '';
@@ -246,7 +266,7 @@
     }
     const fi = it.fi;
     if (state.view === 'list') {
-      return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>${isAdmin ? '<td></td>' : ''}</tr>`;
+      return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td></tr>`;
     }
     // Details: a small thumbnail only when it already exists (no storage read).
     const th = it.thumb && it.ready ? `<img data-src="${esc(it.thumb)}" data-ready="1" alt="">` : icon(typeIcon(it));
@@ -255,7 +275,7 @@
     const chips = (a) => `<div class="tg">${(a || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>`;
     return `<tr data-file="${fi}" id="f${it.id}"><td><div class="nm">${th}<span>${esc(it.name)}</span></div></td>
       <td class="dt">${PG.dateHtml(it.taken)}</td><td class="num">${dim}</td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>
-      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td>${isAdmin ? '<td></td>' : ''}</tr>`;
+      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td><td></td></tr>`;
   }
 
   // ---------------------------------------------------------------- lazy loading
@@ -374,7 +394,8 @@
       const d = await PG.api('GET', '/api/on-this-day');
       const files = (d.files || []).filter((f) => f.thumb && f.ready).slice(0, 14);
       const slot = content.querySelector('.strip-slot');
-      if (!files.length || !slot) return;
+      if (!slot) return;
+      if (!files.length) { slot.innerHTML = ''; return; }
       slot.innerHTML = `<a class="section-title" href="/on-this-day" data-nav-mode="/on-this-day">${icon('history')} ${esc(t('on_this_day'))} · ${PG.num(d.files.length)}${d.more ? '+' : ''}</a>
         <div class="grid view-small otd">${files.map((f) => `<a class="tile file" href="/on-this-day" data-nav-mode="/on-this-day"><div class="thumb"><img src="${esc(f.thumb)}" class="loaded" alt=""></div>
         <div class="label"><small>${esc(t('years_ago', { n: PG.num(new Date().getFullYear() - PG.parseDate(f.taken).getFullYear()) }))}</small></div></a>`).join('')}</div>`;
@@ -390,7 +411,29 @@
   function setSort(s) {
     state.sort = s;
     PG.setPref('sort', s);
-    if (state.mode === 'search') load(); else if (state.data) render();
+    if (state.mode === 'search' || flat()) load(); else if (state.data) render();
+  }
+  function setFlat(on) {
+    state.flat = on;
+    PG.setPref('flat', on);
+    load();
+  }
+  async function toggleOtd(btn) {
+    const path = btn.dataset.otdPath, on = btn.getAttribute('aria-pressed') !== 'true';
+    btn.disabled = true;
+    try {
+      await PG.api('POST', '/api/otd-folder', { path, on });
+      const f = state.data.folders.find((x) => x.path === path);
+      if (f) f.otd = on;
+      content.querySelectorAll('[data-otd-path]').forEach((b) => {
+        if (b.dataset.otdPath !== path) return;
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        b.title = on ? t('otd_unflag') : t('otd_flag');
+      });
+      if (state.path === '' && !state.flat) loadOnThisDayStrip();
+    } catch (e) { PG.error(e); }
+    btn.disabled = false;
   }
 
   // ---------------------------------------------------------------- scan (admin)
@@ -489,6 +532,8 @@
 
   // ---------------------------------------------------------------- events
   root.addEventListener('click', (e) => {
+    const otdB = e.target.closest('[data-otd-path]');
+    if (otdB) { e.preventDefault(); e.stopPropagation(); toggleOtd(otdB); return; }
     const scanB = e.target.closest('[data-scan-path]');
     if (scanB) { e.preventDefault(); e.stopPropagation(); scanClick(scanB.dataset.scanPath, scanB.dataset.name); return; }
     const navMode = e.target.closest('[data-nav-mode]');
@@ -506,6 +551,7 @@
     const a = act.dataset.act;
     if (a === 'up' && state.path !== '') go(browseUrl(state.data && state.data.parent != null ? state.data.parent : ''));
     else if (a === 'search') toggleSearch();
+    else if (a === 'flat') setFlat(!state.flat);
     else if (a === 'refresh') load({ refresh: true });
     else if (a === 'scan') scanClick(state.path, (state.data && state.data.crumbs.slice(-1)[0] || { name: '/' }).name);
     else if (a === 'more') { act.closest('.more-wrap').remove(); state.page++; load({ append: true }); }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Gallery\Access;
+use App\Gallery\OtdFolders;
 use App\Gallery\Paths;
 use App\Gallery\Presenter;
 use App\Gallery\Signer;
@@ -43,6 +44,7 @@ class SearchController extends Controller
             'name_desc' => $q->orderByDesc('media.filename'),
             'date' => $q->orderByRaw("$date asc"),
             'size' => $q->orderBy('media.size'),
+            'type' => $q->orderBy('media.type')->orderBy('media.ext')->orderBy('media.filename'),
             'size_desc' => $q->orderByDesc('media.size'),
             default => $q->orderByRaw("$date desc"),
         };
@@ -175,15 +177,55 @@ class SearchController extends Controller
     public function onThisDay(Request $request)
     {
         $access = Access::for($request->user());
-        $today = Carbon::now(config('app.display_timezone'));
+        $today = Carbon::now($request->user()->tz());
         $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))
             ->whereNotNull('taken_at')
             ->whereMonth('taken_at', $today->month)->whereDay('taken_at', $today->day)
             ->whereYear('taken_at', '<', $today->year)
             ->orderByDesc('taken_at');
         $access->scope($q, 'media.path');
+        // Only folders the user flagged (nothing is flagged by default).
+        OtdFolders::for($request->user())->scope($q, 'media.path');
 
         return response()->json($this->files($q, $access, $request) + ['folders' => []]);
+    }
+
+    /** "Folderless": every file in a folder and all folders below it. Database only (known files). */
+    public function folderless(Request $request)
+    {
+        $data = $request->validate(['path' => ['nullable', 'string', 'max:2000'], 'sort' => ['nullable', 'string', 'max:20']]);
+        $access = Access::for($request->user());
+        $r = $access->resolve($data['path'] ?? '');
+        $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))->whereIn('media.type', ['image', 'video']);
+        $access->scope($q, 'media.path');
+        if (! $r['virtualRoot'] && $r['real'] !== '') {
+            $q->where('media.path', 'like', Paths::like($r['real']).'/%');
+        }
+        $out = $this->files($this->sort($q, $data['sort'] ?? null), $access, $request) + ['folders' => []];
+        if ((int) $request->query('page', 0) === 0) {
+            // How much is not known yet: folders never listed, and files never read (no thumbnail yet).
+            $dirs = Directory::query()->whereNull('listed_at');
+            $access->scope($dirs, 'path');
+            if (! $r['virtualRoot'] && $r['real'] !== '') {
+                $dirs->where('path', 'like', Paths::like($r['real']).'/%');
+            }
+            $out['unlisted'] = $dirs->count();
+        }
+
+        return response()->json($out);
+    }
+
+    /** Flag or un-flag a folder for "On this day". Recursive; it overwrites all folders below it. */
+    public function flagFolder(Request $request)
+    {
+        $data = $request->validate(['path' => ['required', 'string', 'max:2000'], 'on' => ['required', 'boolean']]);
+        $access = Access::for($request->user());
+        $r = $access->resolve($data['path']);
+        abort_if($r['virtualRoot'] || $r['real'] === null, 422);
+        $flags = OtdFolders::for($request->user());
+        $flags->set($r['real'], (bool) $data['on']);
+
+        return response()->json(['on' => $flags->effective($r['real'])]);
     }
 
     public function map(Request $request)

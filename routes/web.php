@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\FolderController;
 use App\Http\Controllers\Admin\ScanController;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BrowseController;
@@ -44,6 +45,8 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::get('/on-this-day', [SearchController::class, 'onThisDay']);
         Route::get('/map', [SearchController::class, 'map']);
         Route::get('/suggest/{kind}', [SearchController::class, 'suggest'])->whereIn('kind', ['tags', 'persons', 'cameras', 'places']);
+        Route::get('/folderless', [SearchController::class, 'folderless']);
+        Route::post('/otd-folder', [SearchController::class, 'flagFolder']);
         Route::post('/prefs', [ProfileController::class, 'prefs']);
 
         Route::get('/media/{media}', [MediaInfoController::class, 'show'])->whereNumber('media');
@@ -69,5 +72,8 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::put('/users/{user}/folders/{folder}', [FolderController::class, 'update'])->name('folders.update');
         Route::delete('/users/{user}/folders/{folder}', [FolderController::class, 'destroy'])->name('folders.destroy');
         Route::get('/scans', [ScanController::class, 'index'])->name('scans');
+        Route::get('/settings', [SettingsController::class, 'show'])->name('settings');
+        Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+        Route::post('/settings/send-now', [SettingsController::class, 'sendNow'])->name('settings.send');
     });
 });

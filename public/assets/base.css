@@ -262,6 +262,14 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .tile.folder .count { position: absolute; bottom: 8px; inset-inline-end: 8px; background: rgba(255,255,255,.85); color: var(--text); border-radius: 999px; padding: 1px 9px; font-size: .78em; font-weight: 700; }
 .tile .scan-mini { position: absolute; top: 6px; inset-inline-start: 6px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255,255,255,.88); color: var(--p2d); cursor: pointer; opacity: 0; transition: opacity .2s; }
 .tile:hover .scan-mini, .tile .scan-mini:focus { opacity: 1; }
+/* "On this day" flag on a folder: same color as the On this day menu icon (palette 2). Always visible when on. */
+.tile .otd-mini { position: absolute; top: 6px; inset-inline-end: 6px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; border: 0; background: rgba(255,255,255,.88); color: var(--p2d); cursor: pointer; opacity: 0; transition: opacity .2s; }
+.tile .otd-mini .ic { width: 18px; height: 18px; }
+.tile:hover .otd-mini, .tile .otd-mini:focus, .tile .otd-mini.on { opacity: 1; }
+.tile .otd-mini.on, .otd-btn.on { background: var(--p2); box-shadow: 0 0 0 2px var(--p2d); }
+.otd-btn { color: var(--p2d); }
+.otd-btn:not(.on) { opacity: .55; }
+.flat-note { margin: 0 0 8px; }
 .badge-row { position: absolute; top: 6px; inset-inline-end: 6px; display: flex; gap: 4px; z-index: 2; }
 .badge { display: inline-flex; align-items: center; gap: 3px; background: rgba(255,255,255,.88); border-radius: 999px; padding: 2px 7px; font-size: .74em; font-weight: 800; color: var(--text); }
 .badge.fav { color: var(--fav); }
@@ -433,15 +441,20 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 @media (max-width: 760px) {
   body { font-size: 14.5px; }
   .only-mobile { display: inline-grid !important; }
+  /* backdrop-filter makes the top bar the "containing block" of fixed children: the menu would be only as high
+     as the bar. On phones the bar is solid instead, so the menu can cover the whole screen height. */
+  .topbar { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--surface); }
   .mainnav {
-    position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 260px; z-index: 60; flex-direction: column; margin: 0; padding: 70px 12px 20px;
-    background: var(--surface); box-shadow: 0 0 40px var(--shadow-c); transform: translateX(-105%); transition: transform .25s ease;
+    position: fixed; top: 0; bottom: 0; inset-inline-start: 0; width: 270px; max-width: 82vw; z-index: 60; flex-direction: column; margin: 0; padding: 70px 12px 20px;
+    overflow-y: auto; background: #fff; box-shadow: 4px 0 28px rgba(60, 75, 110, .25); transform: translateX(-105%); transition: transform .25s ease;
   }
+  [dir="rtl"] .mainnav { box-shadow: -4px 0 28px rgba(60, 75, 110, .25); }
   [dir="rtl"] .mainnav { transform: translateX(105%); }
   .menu-open .mainnav { transform: none; }
   .navlink span { display: inline; }
   .navlink { padding: 10px 12px; }
-  .menu-open .menu-backdrop { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(120,130,150,.3); }
+  /* the menu lives inside the top bar (z-index 40), so the dimmed backdrop must be below it */
+  .menu-open .menu-backdrop { display: block; position: fixed; inset: 0; z-index: 35; background: rgba(60,70,95,.35); }
   .brand-name { font-size: .95rem; }
   .page { padding-top: 12px; }
   .toolbar { top: 54px; gap: 4px; padding: 6px; }
@@ -468,7 +481,7 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
   .avatar-edit { flex-direction: column; text-align: center; }
   .scan-btn .scan-label { display: none; }
 }
-@media (hover: none) { .tile .scan-mini { opacity: 1; } .facebox { opacity: .85; } }
+@media (hover: none) { .tile .scan-mini, .tile .otd-mini { opacity: 1; } .facebox { opacity: .85; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 .v-int { width: auto; padding: 6px 4px; border-radius: 10px; background: rgba(255,255,255,.6); font-size: .85em; }
 @media (max-width: 760px) { .v-int { display: none; } .v-top [data-v="fs"] { display: none; } }

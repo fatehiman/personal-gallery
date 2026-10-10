@@ -15,9 +15,16 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   titles in their root; a title opens the real folder. Nested folders (a folder inside or around an assigned folder)
   are refused with a clear message.
 - **Admin sees all folders** and can **scan a folder** (one scan job at a time, can be stopped from any scan button).
+  Manual scans are for quick needs. The normal way is the **background scan** (below).
+- **Admin settings** (menu *Settings*): Telegram bot token, group/channel ID, minimum years, max images and max videos
+  for the daily "On this day" message; background scan on/off and seconds per run.
 - **Six views**: Mosaic, Small tiles, Gallery (default), Large tiles, **Quick list** (names, size, date only — no file is
   read) and **Detailed list** (date taken, dimensions, camera, location, tags, people, description).
-- **Sort** by name, date, size (both directions) or type. **Up / Home** buttons and breadcrumbs.
+- **Sort** by name, date, size (both directions) or type. The default is **newest first**. The sort order and the view
+  are saved in the user account (not in the browser). **Up** button, **Home** in the menu and in the breadcrumbs.
+- **Folderless** (toggle button): shows all photos and videos of the current folder **and all folders below it**, in one
+  list (paged, sorted by the server). It uses only what the gallery already knows (database), so it never reads the
+  storage box; a small note says how many folders are not read yet.
 - **Search** in folder names, file names, tags, people, descriptions, city and country. Filters: date range (with a
   Gregorian/Jalali date picker), type, tag, person, camera, place, favorites, has location, has description, only this folder.
 - **Fullscreen viewer**: fade transitions, swipe, keyboard, zoom (wheel, pinch, double-tap), slideshow (3/5/10 s),
@@ -31,11 +38,42 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   as 0..1 coordinates, ready for automatic face detection later. Name lists suggest existing names after 500 ms of no
   typing, and match any part of a name (`ja` finds `Mrs. Janet Jackson`).
 - **Videos**: first frame as thumbnail (ffmpeg), playback with Video.js, duration, codec, GPS from phone videos.
-- **Favorites**, **On this day** (photos taken on today's date in past years), **Map** of photos with GPS
+- **Favorites**, **On this day** (photos taken on today's date in past years, only from **flagged folders**), **Map** of photos with GPS
   (Leaflet + marker clusters; city and country names in English and Persian from OpenStreetMap Nominatim).
 - **Profile**: change name, password, language, calendar and profile picture. Without a picture, one is looked up by
   e-mail on save (Gravatar, Libravatar, unavatar.io; at most ~10 seconds).
 - **Fully responsive** (phones, tablets, desktops).
+
+## On this day: flagged folders and Telegram
+
+- By default nothing is flagged, so *On this day* is empty for everybody. Every folder tile has a small clock icon
+  (visible on hover, always visible when on) to flag it. In the list views it is a button in the last column.
+- Flags are **recursive**: flagging a folder flags everything below it. A sub folder can be un-flagged (and then its
+  children are un-flagged too). Setting a folder always overwrites the flags of all folders below it.
+  Table `otd_folders` (user, real path, flagged); the nearest row above a folder decides (`App\Gallery\OtdFolders`).
+- Every day at **19:00 project time (IRST)** `gallery:otd-telegram` sends photos and videos taken on that date in past
+  years to a Telegram group or channel. It uses the flagged folders of **admin** users only (normal users do not get
+  Telegram messages). Settings: bot token (stored encrypted), group/channel ID, minimum years, max images, max videos.
+  Videos over 50 MB are skipped; photos over 10 MB are sent as files. The bot must be a member of the group
+  (an admin of the channel). The *Send today's memories now* button on the settings page sends the same message at once.
+
+## Background scan (the slow crawler)
+
+`gallery:crawl` runs from the scheduler every **3 minutes** and works about **20 seconds** (setting), then stops.
+It goes through all folders in a fixed order (depth first, by name) and remembers the position (`settings.crawl_pos`).
+
+- For each folder it makes **one `stat` call**. If the folder date is the same as in the DB, nothing was added or
+  removed, and it goes on to the next folder at once.
+- If the date changed (or the folder was never listed) it reads the listing, and reads (scan: EXIF + thumbnail) the
+  files that were never read. If the time is over, it continues in the same folder 3 minutes later.
+- At the end of the tree it starts again from the first folder. After the first rounds it only finds new files and folders.
+- It pauses while an admin scan job runs. It uses the same read slots (max 2 reads at once) as everything else.
+
+## Time zones
+
+The project time zone is `GALLERY_TZ` (default `Asia/Tehran`, IRST). Dates are stored in UTC. The column
+`users.timezone` (empty = project time zone) is ready for a per-user setting; `User::tz()` already uses it for
+*On this day*. There is no screen for it yet.
 
 ## How it keeps the slow storage fast
 
@@ -88,7 +126,7 @@ php artisan gallery:user admin --admin --name="Admin"     # asks for the passwor
 php artisan serve
 ```
 
-Background work (scan job and place names) runs from the scheduler:
+Background work (scan job, background scan, place names, Telegram) runs from the scheduler:
 
 ```bash
 * * * * * cd /path/to/app && php artisan schedule:run >> /dev/null 2>&1
@@ -101,6 +139,8 @@ Useful commands:
 | `gallery:user <username> [--admin] [--name=] [--password-stdin]` | create a user or reset a password |
 | `gallery:work` | run the active scan job for ~55 s (the scheduler starts it every minute) |
 | `gallery:geocode` | find city/country names for photos with GPS (1 request per second) |
+| `gallery:crawl [--budget=20]` | background scan: walk folders, read new files, for a few seconds (scheduler: every 3 min) |
+| `gallery:otd-telegram [--force]` | send today's "On this day" memories to Telegram (scheduler: daily 19:00 IRST) |
 
 Tests: `php artisan test`.
 

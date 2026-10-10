@@ -19,12 +19,12 @@
 <div id="gallery" data-mode="{{ $mode }}">
     <div class="toolbar card">
         <div class="tb-group">
-            <a class="tool c0" href="{{ route('browse') }}" data-nav="" title="{{ __('ui.home') }}">@include('partials.icon', ['i' => 'house'])<span>{{ __('ui.home') }}</span></a>
             <button class="tool c1" type="button" data-act="up" title="{{ __('ui.up') }}">@include('partials.icon', ['i' => 'arrow-up'])<span>{{ __('ui.up') }}</span></button>
         </div>
         <nav class="crumbs" id="crumbs" aria-label="breadcrumb"></nav>
         <div class="tb-group tb-end">
             <button class="tool c2" type="button" data-act="search" title="{{ __('ui.search') }}" aria-expanded="false">@include('partials.icon', ['i' => 'search'])<span>{{ __('ui.search') }}</span></button>
+            <button class="tool c0 flat-btn" type="button" data-act="flat" title="{{ __('ui.folderless_hint') }}" aria-pressed="false">@include('partials.icon', ['i' => 'images'])<span>{{ __('ui.folderless') }}</span></button>
             <div class="dropdown">
                 <button class="tool c3" type="button" data-dd="sort" title="{{ __('ui.sort') }}">@include('partials.icon', ['i' => 'arrow-up-down'])<span>{{ __('ui.sort') }}</span></button>
                 <div class="dd-menu" data-dd-menu="sort">

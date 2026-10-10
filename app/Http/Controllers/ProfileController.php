@@ -71,6 +71,7 @@ class ProfileController extends Controller
             'view' => ['nullable', 'in:tiny,small,medium,large,list,details'],
             'sort' => ['nullable', 'in:name,name_desc,date,date_desc,size,size_desc,type'],
             'hide_slow_tip' => ['nullable', 'boolean'],
+            'flat' => ['nullable', 'boolean'],
             'slide_interval' => ['nullable', 'integer', 'in:3,5,10'],
         ]);
         $user = $request->user();

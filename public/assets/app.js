@@ -201,12 +201,11 @@
   PG.error = (e) => PG.toast(PG.esc(e && e.message ? e.message : PG.t('error')), { type: 'err', timeout: 6000 });
 
   // ---------------------------------------------------------------- prefs
-  PG.pref = (k, d) => {
-    try { const v = localStorage.getItem('pg.' + k); if (v !== null) return JSON.parse(v); } catch (e) { /* storage blocked */ }
-    return cfg.prefs && cfg.prefs[k] !== undefined ? cfg.prefs[k] : d;
-  };
+  // Preferences belong to the user account (saved on the server), not to the browser.
+  if (!cfg.prefs || Array.isArray(cfg.prefs)) cfg.prefs = {};
+  PG.pref = (k, d) => (cfg.prefs[k] !== undefined ? cfg.prefs[k] : d);
   PG.setPref = (k, v, server = true) => {
-    try { localStorage.setItem('pg.' + k, JSON.stringify(v)); } catch (e) { /* storage blocked */ }
+    cfg.prefs[k] = v;
     if (server) PG.api('POST', '/api/prefs', { [k]: v }).catch(() => {});
   };
 

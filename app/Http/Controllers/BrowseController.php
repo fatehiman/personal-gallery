@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Gallery\Access;
 use App\Gallery\Indexer;
+use App\Gallery\OtdFolders;
 use App\Gallery\Paths;
 use App\Gallery\Presenter;
 use App\Gallery\Signer;
@@ -42,6 +43,7 @@ class BrowseController extends Controller
             $out['scan'] = ScanController::summary(ScanJob::active());
         }
 
+        $otd = OtdFolders::for($request->user());
         if ($r['virtualRoot']) {
             foreach ($access->folders() as $f) {
                 $dir = Directory::findByPath($f->path);
@@ -54,6 +56,7 @@ class BrowseController extends Controller
                     'mtime' => Presenter::iso($dir?->mtime),
                     'count' => $dir?->listed_at ? $dir->dir_count + $dir->file_count : null,
                     'cover' => $cover ? Signer::thumb($cover) : null,
+                    'otd' => $otd->effective($f->path),
                 ];
             }
 
@@ -76,6 +79,7 @@ class BrowseController extends Controller
                 'mtime' => Presenter::iso($sd->mtime),
                 'count' => $sd->listed_at ? $sd->dir_count + $sd->file_count : null,
                 'cover' => isset($covers[$sd->id]) ? Signer::thumb($covers[$sd->id]) : null,
+                'otd' => $otd->effective($sd->path),
             ];
         }
         $media = Media::where('directory_id', $dir->id)->with(['tags', 'persons'])->get(Media::LIST_COLUMNS);

@@ -8,7 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 
 class User extends Authenticatable
 {
-    protected $fillable = ['name', 'username', 'email', 'password', 'is_admin', 'is_active', 'locale', 'calendar', 'prefs'];
+    protected $fillable = ['name', 'username', 'email', 'password', 'is_admin', 'is_active', 'locale', 'calendar', 'timezone', 'prefs'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -33,6 +33,14 @@ class User extends Authenticatable
     public function favorites(): BelongsToMany
     {
         return $this->belongsToMany(Media::class, 'favorites')->withPivot('created_at');
+    }
+
+    /** The user's own time zone, or the project time zone (Asia/Tehran by default). */
+    public function tz(): string
+    {
+        $tz = $this->timezone;
+
+        return $tz && in_array($tz, \DateTimeZone::listIdentifiers(), true) ? $tz : config('app.display_timezone');
     }
 
     public function pref(string $key, mixed $default = null): mixed
