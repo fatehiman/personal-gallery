@@ -9,6 +9,7 @@
   const panel = document.getElementById('searchpanel');
   const isAdmin = PG.cfg.admin;
 
+  const DELETED = '~deleted'; // admin: virtual folder "Deleted items"
   const VIEWS = ['tiny', 'small', 'medium', 'large', 'list', 'details'];
   const VIEW_ICONS = { tiny: 'grid-3x3', small: 'layout-grid', medium: 'grid-2x2', large: 'image', list: 'list', details: 'table' };
   const CHUNK = 240;
@@ -107,8 +108,8 @@
   function updateChrome() {
     const browse = state.mode === 'browse';
     root.querySelector('[data-act="up"]').disabled = !(browse && state.path !== '');
-    root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse || state.flat));
-    root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || state.flat || (!isAdmin && state.path === '')));
+    root.querySelectorAll('.admin-only').forEach((b) => (b.hidden = !browse || state.flat || inDeleted()));
+    root.querySelectorAll('.browse-only').forEach((b) => (b.hidden = !browse || state.flat || inDeleted() || (!isAdmin && state.path === '')));
     const small = state.view === 'tiny' || state.view === 'small'; // no room for select / delete icons on thumbnails
     const sb = root.querySelector('.select-btn');
     sb.hidden = small || (state.mode === 'browse' && state.path === '' && !isAdmin && !state.flat);
@@ -160,6 +161,7 @@
   function render() {
     const d = state.data;
     const folders = sortList(d.folders || [], true).map((f) => ({ ...f, kind: 'folder' }));
+    folders.sort((a, b) => (a.special ? 1 : 0) - (b.special ? 1 : 0)); // "Deleted items" stays last
     // Search and Folderless are sorted by the server (the list comes in pages).
     state.files = state.mode === 'search' || flat() ? d.files.slice() : sortList(d.files || [], false);
     state.items = folders.concat(state.files.map((f) => ({ ...f, kind: 'file' })));
@@ -170,7 +172,7 @@
     updateChrome();
 
     if (!state.items.length) {
-      const msg = state.mode === 'browse' ? (state.path === '' && !isAdmin && !flat() ? t('no_folders') : t('empty_folder'))
+      const msg = inDeleted() ? t('deleted_empty') : state.mode === 'browse' ? (state.path === '' && !isAdmin && !flat() ? t('no_folders') : t('empty_folder'))
         : state.mode === 'favorites' ? t('favorites_empty') : state.mode === 'onthisday' ? t('on_this_day_none') + ' ' + t('on_this_day_empty') : t('no_results');
       const ic = { favorites: 'heart', onthisday: 'history', search: 'search' }[state.mode] || 'folder-open';
       content.innerHTML = `<div class="strip-slot"></div><div class="empty-note">${icon(ic)}${esc(msg)}</div>`;
@@ -192,6 +194,7 @@
     sentinelObs.observe(content.querySelector('.sentinel'));
   }
 
+  const inDeleted = () => state.mode === 'browse' && isAdmin && (state.path === DELETED || state.path.startsWith(DELETED + '/'));
   const flat = () => state.mode === 'browse' && state.flat;
   const flatNote = () => {
     const d = state.data || {};
@@ -219,7 +222,7 @@
   const typeIcon = (f) => (f.type === 'video' ? 'file-video' : f.type === 'image' ? 'file-image' : 'file');
   const color = (i) => 'c' + (i % 6);
   const scanBtn = (it) => {
-    if (!isAdmin || it.kind !== 'folder') return '';
+    if (!isAdmin || it.kind !== 'folder' || it.special || inDeleted()) return '';
     const run = !!state.scan;
     return `<button type="button" class="${state.view === 'list' || state.view === 'details' ? 'icon-btn' : 'scan-mini'}" data-scan-path="${esc(it.path)}" data-name="${esc(it.name)}" title="${esc(run ? t('stop_scan') : t('scan'))}">${icon(run ? 'circle-stop' : 'scan-search')}</button>`;
   };
@@ -231,7 +234,7 @@
 
   // "On this day" flag of a folder (all users). Shown on hover; filled when the folder is flagged.
   const otdBtn = (it) => {
-    if (it.kind !== 'folder' || state.mode !== 'browse') return '';
+    if (it.kind !== 'folder' || state.mode !== 'browse' || it.special || inDeleted()) return '';
     const cls = state.view === 'list' || state.view === 'details' ? 'icon-btn otd-btn' : 'otd-mini';
     return `<button type="button" class="${cls} ${it.otd ? 'on' : ''}" data-otd-path="${esc(it.path)}" aria-pressed="${it.otd ? 'true' : 'false'}" title="${esc(it.otd ? t('otd_unflag') : t('otd_flag'))}">${icon('history')}</button>`;
   };
@@ -242,7 +245,7 @@
       const count = it.count != null ? `<span class="count">${PG.num(it.count)}</span>` : '';
       const sub = state.mode === 'search' && it.parentName ? esc(it.parentName) : it.mtime ? PG.dateHtml(it.mtime, false) : '&nbsp;';
       return `<a class="tile folder ${color(i)} ${selCls(it)}" href="${browseUrl(it.path)}" data-nav="${esc(it.path)}">
-        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}${selBox()}
+        <div class="thumb">${icon(it.special ? 'trash-2' : 'folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}${selBox()}
         <div class="label">${esc(it.name)}<small>${sub}</small></div></a>`;
     }
     const fi = it.fi;
@@ -269,7 +272,7 @@
   function rowHtml(it, i) {
     const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}</td>`;
     if (it.kind === 'folder') {
-      const nm = `<div class="nm ${color(i)}">${selBox()}${icon('folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
+      const nm = `<div class="nm ${color(i)}">${selBox()}${icon(it.special ? 'trash-2' : 'folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
       const cnt = it.count != null ? esc(t('items', { n: PG.num(it.count) })) : '';
       if (state.view === 'list') return `<tr class="${selCls(it)}" data-nav-row="${esc(it.path)}"><td>${nm}</td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>${admin}</tr>`;
       return `<tr class="${selCls(it)}" data-nav-row="${esc(it.path)}"><td>${nm}</td><td></td><td></td><td class="num">${cnt}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td><td></td><td></td><td></td><td></td>${admin}</tr>`;
@@ -436,20 +439,22 @@
   function updateSelBar() {
     selBar.hidden = !state.selecting;
     selBar.querySelector('[data-sel-count]').textContent = t('selected_n', { n: PG.num(state.sel.size) });
-    selBar.querySelector('[data-act="sel-delete"]').disabled = !state.sel.size;
+    const b = selBar.querySelector('[data-act="sel-delete"]');
+    b.disabled = !state.sel.size;
+    b.innerHTML = inDeleted() ? `${icon('rotate-ccw')} ${esc(t('restore_selected'))}` : `${icon('x')} ${esc(t('delete_selected'))}`;
   }
   function toggleSel(target) {
     const file = target.closest('[data-file]'), folder = target.closest('[data-nav], [data-nav-row]');
     const el = file || folder;
     const key = file ? 'f:' + (file.id || '').slice(1) : folder ? 'd:' + (folder.dataset.nav || folder.dataset.navRow) : null;
-    if (!key) return;
+    if (!key || key === 'd:' + DELETED) return;
     state.sel.has(key) ? state.sel.delete(key) : state.sel.add(key);
     el.classList.toggle('selected', state.sel.has(key));
     updateSelBar();
   }
   function selectAll() {
-    state.items.forEach((it) => state.sel.add(selKey(it)));
-    content.querySelectorAll('.tile, tr[data-file], tr[data-nav-row]').forEach((el) => el.classList.add('selected'));
+    state.items.filter((it) => !it.special).forEach((it) => state.sel.add(selKey(it)));
+    content.querySelectorAll('.tile:not([data-nav="' + DELETED + '"]), tr[data-file], tr[data-nav-row]').forEach((el) => el.classList.add('selected'));
     updateSelBar();
   }
   function confirmDelete(n) {
@@ -490,6 +495,16 @@
     paths.forEach((p) => state.sel.delete('d:' + p));
     updateSelBar();
     if (before && !state.items.length) render();
+  }
+  // Admin, "Deleted items": get files / folders back (no question: nothing is lost by restoring).
+  async function restoreItems(ids, paths) {
+    try {
+      const r = await PG.api('POST', '/api/admin/restore', { ids, paths });
+      removeItems(ids, paths);
+      PG.toast(icon('check') + ' ' + esc(t('restored_n', { n: PG.num(r.restored) })));
+      if (state.selecting && !state.sel.size) setSelecting(false);
+      return true;
+    } catch (e) { PG.error(e); return false; }
   }
   async function deleteItems(ids, paths) {
     if (!(await confirmDelete(ids.length + paths.length))) return false;
@@ -649,7 +664,7 @@
     else if (a === 'select') setSelecting(!state.selecting);
     else if (a === 'sel-cancel') setSelecting(false);
     else if (a === 'sel-all') selectAll();
-    else if (a === 'sel-delete') { const s = selectedItems(); if (s.ids.length || s.paths.length) deleteItems(s.ids, s.paths); }
+    else if (a === 'sel-delete') { const s = selectedItems(); if (s.ids.length || s.paths.length) (inDeleted() ? restoreItems : deleteItems)(s.ids, s.paths); }
     else if (a === 'refresh') load({ refresh: true });
     else if (a === 'scan') scanClick(state.path, (state.data && state.data.crumbs.slice(-1)[0] || { name: '/' }).name);
     else if (a === 'more') { act.closest('.more-wrap').remove(); state.page++; load({ append: true }); }
@@ -681,7 +696,8 @@
         }
       },
       onFolder(path) { go(browseUrl(path), true); },
-      onDelete(f) { return deleteItems([f.id], []); },
+      restore: inDeleted(),
+      onDelete(f) { return inDeleted() ? restoreItems([f.id], []) : deleteItems([f.id], []); },
     });
   }
 

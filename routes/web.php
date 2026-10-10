@@ -55,6 +55,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::get('/media/{media}/video', [MediaInfoController::class, 'videoStatus'])->whereNumber('media');
         Route::post('/media/{media}/video', [MediaInfoController::class, 'videoStart'])->whereNumber('media');
         Route::delete('/media/{media}/video', [MediaInfoController::class, 'videoCancel'])->whereNumber('media');
+        Route::post('/media/{media}/cover', [MediaInfoController::class, 'cover'])->whereNumber('media');
         Route::post('/media/{media}/description', [MediaInfoController::class, 'description'])->whereNumber('media');
         Route::post('/media/{media}/rotate', [MediaInfoController::class, 'rotate'])->whereNumber('media');
         Route::post('/media/{media}/favorite', [MediaInfoController::class, 'favorite'])->whereNumber('media');
@@ -64,6 +65,7 @@ Route::middleware(['auth', 'auth.session'])->group(function () {
         Route::delete('/media/{media}/persons/{mp}', [MediaInfoController::class, 'removePerson'])->whereNumber(['media', 'mp']);
 
         Route::middleware('admin')->prefix('admin')->group(function () {
+            Route::post('/restore', [HideController::class, 'restore']);
             Route::get('/dirs', [FolderController::class, 'dirs']);
             Route::get('/scan', [ScanController::class, 'status']);
             Route::post('/scan', [ScanController::class, 'start']);

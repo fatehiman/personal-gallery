@@ -52,7 +52,7 @@ class VideoCache
 
     public static function url(Media $m): string
     {
-        return '/m/v/'.$m->id.'/'.$m->thumb_v.'/'.Signer::sig('v', $m->id, $m->thumb_v).'.'.Signer::ext($m);
+        return '/m/v/'.$m->id.'/'.$m->thumb_v.'/'.Signer::sig(Signer::kind('v', $m->hidden_at !== null), $m->id, $m->thumb_v).'.'.Signer::ext($m);
     }
 
     /** Is a copy process working on this file now? (The process holds a lock; a crashed one releases it.) */

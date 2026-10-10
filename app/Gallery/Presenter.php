@@ -49,7 +49,8 @@ class Presenter
         $hasThumb = (bool) $a['has_thumb'];
         $scanned = $a['scanned_at'] !== null;
         $canThumb = $a['type'] === 'video' || ($a['type'] === 'image' && isset($thumbable[$ext]));
-        $osig = Signer::sig('o', $id, $v);
+        $hidden = ($a['hidden_at'] ?? null) !== null;
+        $osig = Signer::sig(Signer::kind('o', $hidden), $id, $v);
         $num = fn ($x) => $x === null ? null : (float) $x;
         $out = [
             'id' => $id,
@@ -66,13 +67,14 @@ class Presenter
             'th' => isset($a['thumb_h']) ? (int) $a['thumb_h'] : null,
             'scanned' => $scanned,
             'err' => ($a['scan_error'] ?? null) !== null,
-            'thumb' => $canThumb && (! $scanned || $hasThumb) ? "/m/t/$id/$v/".Signer::sig('t', $id, $v).'.webp' : null,
+            'thumb' => $canThumb && (! $scanned || $hasThumb) ? "/m/t/$id/$v/".Signer::sig(Signer::kind('t', $hidden), $id, $v).'.webp' : null,
             'ready' => $hasThumb,
             'url' => "/m/o/$id/$v/$osig.$urlExt",
             'dl' => "/m/d/$id/$v/$osig.$urlExt",
             'rot' => (int) ($a['rotation'] ?? 0),
             'desc' => $a['description'] ?? null,
             'fav' => isset($favs[$id]),
+            'hidden' => $hidden,
             'duration' => $num($a['duration'] ?? null),
             'camera' => trim(($a['camera_make'] ?? '').' '.($a['camera_model'] ?? '')) ?: null,
             'city' => $fa ? (($a['city_fa'] ?? null) ?: ($a['city_en'] ?? null)) : (($a['city_en'] ?? null) ?: ($a['city_fa'] ?? null)),

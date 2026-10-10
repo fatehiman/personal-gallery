@@ -19,6 +19,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class Access
 {
+    /** Admin-only virtual folder with all deleted (hidden) files, in their real folder structure. */
+    public const DELETED = '~deleted';
+
     /** @var Collection<int, FolderAccess> */
     private Collection $folders;
 
@@ -33,6 +36,19 @@ class Access
         $cache ??= new \WeakMap; // one Access per User object (per request)
 
         return $cache[$user] ??= new self($user);
+    }
+
+    /** For the admin: the real path inside "Deleted items" (null when the path is not in it). */
+    public function deletedPath(string $vpath): ?string
+    {
+        if (! $this->isAdmin()) {
+            return null;
+        }
+        if ($vpath === self::DELETED) {
+            return '';
+        }
+
+        return str_starts_with($vpath, self::DELETED.'/') ? substr($vpath, strlen(self::DELETED) + 1) : null;
     }
 
     public function isAdmin(): bool

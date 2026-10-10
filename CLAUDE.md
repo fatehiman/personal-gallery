@@ -22,6 +22,8 @@ Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md fi
 
 - `Media` has a global scope that hides deleted files (`hidden_at`). Use `withoutGlobalScopes()` only in `Indexer` (so hidden
   rows are kept and do not come back) and in future admin tools. "Delete" by users = hide (`HideController`).
+- Deleted files: signature kinds get an `h` suffix (`Signer::kind`), the virtual admin folder is `Access::DELETED` (`~deleted`).
+  Folder images are shared per directory (`folder_covers`), never per user.
 - A file is read again only when its **size** changes; a changed date never triggers a re-scan.
 - Never write to `GALLERY_ROOT`. Never read file content outside `Scanner`/`MediaFileController::original`
   (more exceptions: `TelegramDigest` uploads the files it sends; `VideoCache` copies a video to the local temp folder.

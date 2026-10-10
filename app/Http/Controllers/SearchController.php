@@ -195,18 +195,30 @@ class SearchController extends Controller
     {
         $data = $request->validate(['path' => ['nullable', 'string', 'max:2000'], 'sort' => ['nullable', 'string', 'max:20']]);
         $access = Access::for($request->user());
-        $r = $access->resolve($data['path'] ?? '');
-        $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))->whereIn('media.type', ['image', 'video']);
-        $access->scope($q, 'media.path');
-        if (! $r['virtualRoot'] && $r['real'] !== '') {
-            $q->where('media.path', 'like', Paths::like($r['real']).'/%');
+        $deleted = $access->deletedPath(Paths::normalize($data['path'] ?? ''));
+        if ($deleted !== null) {
+            // Admin, "Deleted items": all hidden files below this folder.
+            $q = Media::withoutGlobalScopes()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))->whereNotNull('media.hidden_at');
+            if ($deleted !== '') {
+                $q->where('media.path', 'like', Paths::like($deleted).'/%');
+            }
+            $r = ['real' => $deleted, 'virtualRoot' => false];
+        } else {
+            $r = $access->resolve($data['path'] ?? '');
+            $q = Media::query()->select(array_map(fn ($c) => 'media.'.$c, Media::LIST_COLUMNS))->whereIn('media.type', ['image', 'video']);
+            $access->scope($q, 'media.path');
+            if (! $r['virtualRoot'] && $r['real'] !== '') {
+                $q->where('media.path', 'like', Paths::like($r['real']).'/%');
+            }
         }
         $out = $this->files($this->sort($q, $data['sort'] ?? null), $access, $request) + ['folders' => []];
         if ((int) $request->query('page', 0) === 0) {
             // How much is not known yet: folders never listed, and files never read (no thumbnail yet).
             $dirs = Directory::query()->whereNull('listed_at');
             $access->scope($dirs, 'path');
-            if (! $r['virtualRoot'] && $r['real'] !== '') {
+            if ($deleted !== null) {
+                $dirs->whereRaw('1 = 0'); // nothing to wait for: deleted files are all known
+            } elseif (! $r['virtualRoot'] && $r['real'] !== '') {
                 $dirs->where('path', 'like', Paths::like($r['real']).'/%');
             }
             $out['unlisted'] = $dirs->count();

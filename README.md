@@ -53,6 +53,14 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   box. Later the main admin will be able to delete the hidden files for real. The **Select** button lets users mark
   several photos, videos and folders (a folder means all its photos and videos, also in sub folders) and delete them
   together. Select is not shown in the two smallest views (Mosaic, Small tiles).
+- **Folder image (album cover)**: in the viewer, with the info panel open, a photo has the button *Set as folder image*.
+  It is a shared setting of the folder (table `folder_covers`): every user who can see the folder may change it, and
+  overwrites what others chose. If the chosen photo is deleted, the folder shows a normal picture again.
+- **Deleted items** (admin only): a virtual folder at the root, not a real folder. It lists every deleted (hidden) file
+  in its **real folder structure** (for example `rKmob/202307/Other/A.jpg`), whoever deleted it and whatever alias name
+  the user's folder has. The admin can open folders, view files, and **restore** them: in *Select* mode the button is
+  *Restore selected* (files and whole folders), and in the viewer the button is *Restore*. Links of deleted files use
+  another signature, so their old public links stop working; only the admin's view makes new ones.
 - **Empty folders are not shown** (for everybody): a folder that was read and has no sub folder and no visible photo or
   video. A folder that was never read is shown until it is known. A folder that has only empty sub folders is still shown.
 - **Favorites**, **On this day** (photos taken on today's date in past years, only from **flagged folders**), **Map** of photos with GPS

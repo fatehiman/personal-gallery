@@ -52,6 +52,30 @@ class HideController extends Controller
         return response()->json(['hidden' => $count]);
     }
 
+    /** Admin: get deleted files back (by id, or a whole folder of "Deleted items" by path). */
+    public function restore(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['nullable', 'array', 'max:1000'], 'ids.*' => ['integer'],
+            'paths' => ['nullable', 'array', 'max:50'], 'paths.*' => ['string', 'max:2000'],
+        ]);
+        abort_if(empty($data['ids']) && empty($data['paths']), 422);
+        $access = Access::for($request->user());
+        $back = ['hidden_at' => null, 'hidden_by' => null];
+        $count = 0;
+        $hidden = fn () => Media::withoutGlobalScopes()->whereNotNull('hidden_at');
+        if (! empty($data['ids'])) {
+            $count += $hidden()->whereIn('id', $data['ids'])->update($back);
+        }
+        foreach ($data['paths'] ?? [] as $p) {
+            $real = $access->deletedPath(Paths::normalize($p));
+            abort_if($real === null || $real === '', 422);
+            $count += $hidden()->where('path', 'like', Paths::like($real).'/%')->update($back);
+        }
+
+        return response()->json(['restored' => $count]);
+    }
+
     /** Make sure every folder below $real was listed once, so that no unknown file is left behind. */
     private function listTree(Indexer $indexer, string $real): void
     {

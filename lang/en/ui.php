@@ -307,4 +307,13 @@ return [
     'video_missing' => 'The video file was not found.',
     'video_failed' => 'The video could not be copied. Try again.',
     'video_storage' => 'The storage is not available now. Try again later.',
+    'deleted_items' => 'Deleted items',
+    'deleted_empty' => 'Nothing here. Deleted photos and videos are listed here with their real folders.',
+    'restore' => 'Restore',
+    'restore_selected' => 'Restore selected',
+    'restored_n' => ':n files restored.',
+    'set_cover' => 'Set as folder image',
+    'set_cover_hint' => 'Use this photo as the picture of its folder (for everybody who can see the folder)',
+    'cover_set' => 'This photo is now the folder image.',
+    'cover_failed' => 'The thumbnail of this photo could not be made.',
 ];

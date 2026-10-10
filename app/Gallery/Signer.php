@@ -19,6 +19,12 @@ class Signer
         return substr(rtrim(strtr(base64_encode($raw), '+/', '-_'), '='), 0, 22);
     }
 
+    /** Hidden ("deleted") files use other signature kinds: their old URLs stop working, only the admin's Deleted items view makes new ones. */
+    public static function kind(string $kind, bool $hidden): string
+    {
+        return $hidden ? $kind.'h' : $kind;
+    }
+
     public static function check(string $kind, int $id, int $v, string $sig): bool
     {
         return hash_equals(self::sig($kind, $id, $v), $sig);

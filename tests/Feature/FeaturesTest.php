@@ -381,4 +381,79 @@ class FeaturesTest extends TestCase
         $this->actingAs($u)->postJson("/api/media/{$m->id}/video")->assertNotFound();
         $this->actingAs($u)->getJson('/m/v/'.$m->id.'/1/aaaaaaaaaaaaaaaaaaaaaa.mp4')->assertNotFound();
     }
+
+    public function test_any_user_with_access_can_set_the_folder_image(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A/B')->assertOk();
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $mid = Media::where('filename', 'mid.jpg')->firstOrFail();
+        $cover = fn ($u, $path, $folder) => collect($this->actingAs($u)->getJson('/api/list?path='.$path)->json('folders'))->firstWhere('name', $folder)['cover'];
+
+        $this->actingAs($admin)->postJson("/api/media/{$mid->id}/cover")->assertOk();
+        $this->assertSame(\App\Gallery\Signer::thumb($mid->refresh()), $cover($admin, 'A', 'B'));
+
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Mine', 'path' => 'A']);
+        $u2 = $this->user();
+        $this->flushSession();
+        $this->actingAs($u)->postJson("/api/media/{$mid->id}/cover")->assertOk(); // overwrite by another user: same image
+        $this->assertSame(\App\Gallery\Signer::thumb($mid), $cover($u, (string) $fa->id, 'B'));
+        $this->flushSession();
+        $this->actingAs($u2)->postJson("/api/media/{$mid->id}/cover")->assertNotFound(); // no access
+        $this->assertSame(1, \DB::table('folder_covers')->count());
+
+        // hidden cover: the folder falls back to a normal picture
+        $this->flushSession();
+        $this->actingAs($u)->postJson('/api/media/hide', ['ids' => [$mid->id]])->assertOk();
+        $this->assertNotSame(\App\Gallery\Signer::thumb($mid), $cover($u, (string) $fa->id, 'B'));
+        $this->actingAs($u)->postJson("/api/media/{$mid->id}/cover")->assertNotFound();
+    }
+
+    public function test_admin_sees_deleted_items_in_the_real_structure_and_can_restore(): void
+    {
+        $admin = $this->user(true);
+        foreach (['A', 'A/B'] as $p) {
+            $this->actingAs($admin)->getJson('/api/list?path='.$p)->assertOk();
+        }
+        $mid = Media::where('filename', 'mid.jpg')->firstOrFail();
+        $top = Media::where('filename', 'top.jpg')->firstOrFail();
+        $oldThumb = \App\Gallery\Signer::thumb($mid);
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Alias', 'path' => 'A']);
+        $this->flushSession();
+        $this->actingAs($u)->postJson('/api/media/hide', ['ids' => [$mid->id, $top->id]])->assertOk();
+        $this->actingAs($u)->getJson('/api/list?path=~deleted')->assertNotFound();
+        $this->actingAs($u)->postJson('/api/admin/restore', ['ids' => [$mid->id]])->assertForbidden();
+
+        $this->flushSession();
+        $root = $this->actingAs($admin)->getJson('/api/list?path=')->assertOk();
+        $del = collect($root->json('folders'))->firstWhere('special', 'deleted');
+        $this->assertSame(2, $del['count']);
+        $this->assertSame('~deleted', $del['path']);
+        $top1 = $this->actingAs($admin)->getJson('/api/list?path=~deleted')->assertOk();
+        $this->assertSame(['A'], array_column($top1->json('folders'), 'name'));
+        $this->assertSame('Deleted items', $top1->json('crumbs.0.name'));
+        $a = $this->actingAs($admin)->getJson('/api/list?path=~deleted/A')->assertOk();
+        $this->assertSame(['top.jpg'], array_column($a->json('files'), 'name'));
+        $this->assertSame(['B'], array_column($a->json('folders'), 'name'));
+        $b = $this->actingAs($admin)->getJson('/api/list?path=~deleted/A/B')->assertOk();
+        $this->assertSame(['mid.jpg'], array_column($b->json('files'), 'name'));
+        $this->assertSame(1, $this->actingAs($admin)->getJson('/api/folderless?path=~deleted/A/B')->json('files.0.hidden') ? 1 : 0);
+
+        // admin can see the deleted file's thumbnail with the new link; the old public link no longer works
+        $thumb = $b->json('files.0.thumb');
+        $this->assertNotSame($oldThumb, $thumb);
+        $this->get($thumb)->assertOk();
+        $this->get($oldThumb)->assertNotFound();
+        $this->actingAs($admin)->getJson('/api/media/'.$mid->id)->assertOk();
+
+        // restore one folder by path, the other file by id
+        $this->actingAs($admin)->postJson('/api/admin/restore', ['paths' => ['~deleted/A/B']])->assertOk()->assertJsonPath('restored', 1);
+        $this->actingAs($admin)->postJson('/api/admin/restore', ['ids' => [$top->id]])->assertOk()->assertJsonPath('restored', 1);
+        $this->actingAs($admin)->postJson('/api/admin/restore', ['paths' => ['~deleted']])->assertStatus(422);
+        $this->assertSame(0, Media::withoutGlobalScopes()->whereNotNull('hidden_at')->count());
+        $this->flushSession();
+        $this->actingAs($u)->getJson('/api/list?path='.$fa->id.'/B')->assertOk()->assertJsonPath('files.0.name', 'mid.jpg');
+    }
 }

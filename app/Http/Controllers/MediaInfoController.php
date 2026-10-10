@@ -18,8 +18,9 @@ class MediaInfoController extends Controller
 {
     private function media(Request $request, int $id): Media
     {
-        $m = Media::findOrFail($id);
-        abort_unless(Access::for($request->user())->canAccessMedia($m), 404);
+        // Deleted (hidden) files are only for the admin ("Deleted items").
+        $m = Media::withoutGlobalScopes()->findOrFail($id);
+        abort_unless(Access::for($request->user())->canAccessMedia($m) && ($m->hidden_at === null || $request->user()->is_admin), 404);
 
         return $m;
     }
@@ -88,6 +89,30 @@ class MediaInfoController extends Controller
         }
 
         return $st;
+    }
+
+    /** Set this picture as the image of its folder. Every user who can see the folder may do this (shared setting). */
+    public function cover(Request $request, int $media, Scanner $scanner)
+    {
+        $m = $this->media($request, $media);
+        abort_unless($m->type === 'image' && $m->hidden_at === null, 422);
+        if (! $m->has_thumb) {
+            // Make the thumbnail now (reads the file once, through the read slots).
+            $slots = new \App\Gallery\ReadSlots;
+            abort_unless($slots->acquire(15), 503);
+            try {
+                $scanner->scan($m->refresh());
+            } finally {
+                $slots->release();
+            }
+        }
+        abort_unless($m->refresh()->has_thumb, 422, __('ui.cover_failed'));
+        DB::table('folder_covers')->updateOrInsert(
+            ['directory_id' => $m->directory_id],
+            ['media_id' => $m->id, 'user_id' => $request->user()->id, 'updated_at' => now()],
+        );
+
+        return response()->json(['ok' => true, 'thumb' => Signer::thumb($m)]);
     }
 
     public function description(Request $request, int $media)

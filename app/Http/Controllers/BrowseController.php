@@ -30,6 +30,9 @@ class BrowseController extends Controller
     {
         $access = Access::for($request->user());
         $vpath = Paths::normalize((string) $request->query('path', ''));
+        if (($del = $access->deletedPath($vpath)) !== null) {
+            return $this->deleted($request, $access, $vpath, $del);
+        }
         $r = $access->resolve($vpath);
 
         $out = [
@@ -47,6 +50,7 @@ class BrowseController extends Controller
         if ($r['virtualRoot']) {
             foreach ($access->folders() as $f) {
                 $dir = Directory::findByPath($f->path);
+                $custom = $dir ? Directory::customCovers([$dir->id])->first() : null;
                 $cover = Media::where('has_thumb', true)
                     ->where(fn ($w) => $f->path === '' ? $w : $w->where('path', 'like', Paths::like($f->path).'/%'))
                     ->orderBy('directory_id')->first();
@@ -55,7 +59,7 @@ class BrowseController extends Controller
                     'path' => (string) $f->id,
                     'mtime' => Presenter::iso($dir?->mtime),
                     'count' => $dir?->listed_at ? $dir->dir_count + $dir->file_count : null,
-                    'cover' => $cover ? Signer::thumb($cover) : null,
+                    'cover' => ($custom ?? $cover) ? Signer::thumb($custom ?? $cover) : null,
                     'otd' => $otd->effective($f->path),
                 ];
             }
@@ -72,6 +76,7 @@ class BrowseController extends Controller
         $covers = $subdirs->isEmpty() ? collect() : Media::whereIn('id', Media::query()
             ->selectRaw('min(id)')->whereIn('directory_id', $subdirs->pluck('id'))->where('has_thumb', true)->groupBy('directory_id'))
             ->get(['id', 'directory_id', 'thumb_v'])->keyBy('directory_id');
+        Directory::customCovers($subdirs->pluck('id'))->each(fn ($m, $dirId) => $covers->put($dirId, $m));
         foreach ($subdirs as $sd) {
             $out['folders'][] = [
                 'name' => $sd->name,
@@ -88,6 +93,53 @@ class BrowseController extends Controller
             $out['files'][] = Presenter::media($m, $access, $favs);
         }
         $out['listedAt'] = Presenter::iso($dir->listed_at);
+        if ($access->isAdmin() && $vpath === '') {
+            // The virtual folder "Deleted items" (not a real folder).
+            $out['folders'][] = [
+                'name' => __('ui.deleted_items'), 'path' => Access::DELETED, 'mtime' => null, 'special' => 'deleted',
+                'count' => Media::withoutGlobalScopes()->whereNotNull('hidden_at')->count(), 'cover' => null, 'otd' => false,
+            ];
+        }
+
+        return response()->json($out);
+    }
+
+    /** "Deleted items" (admin): hidden files, shown in their real folder structure. Database only. */
+    private function deleted(Request $request, Access $access, string $vpath, string $real)
+    {
+        $crumbs = $access->crumbs($vpath);
+        $crumbs[0]['name'] = __('ui.deleted_items');
+        $out = [
+            'path' => $vpath, 'crumbs' => $crumbs, 'parent' => Paths::parent($vpath) ?? '',
+            'folders' => [], 'files' => [], 'deleted' => true, 'scan' => ScanController::summary(ScanJob::active()),
+        ];
+        $q = Media::withoutGlobalScopes()->whereNotNull('hidden_at');
+        if ($real !== '') {
+            $q->where('path', 'like', Paths::like($real).'/%');
+        }
+        $cut = $real === '' ? 0 : strlen($real) + 1;
+        $dirs = [];
+        foreach ((clone $q)->pluck('path') as $p) {
+            $rest = substr($p, $cut);
+            if (($pos = strpos($rest, '/')) !== false) {
+                $seg = substr($rest, 0, $pos);
+                $dirs[$seg] = ($dirs[$seg] ?? 0) + 1;
+            }
+        }
+        ksort($dirs);
+        foreach ($dirs as $name => $n) {
+            $out['folders'][] = [
+                'name' => (string) $name, 'path' => $vpath.'/'.$name, 'mtime' => null, 'count' => $n, 'cover' => null, 'otd' => false,
+            ];
+        }
+        $dir = Directory::findByPath($real);
+        if ($dir) {
+            $media = (clone $q)->where('directory_id', $dir->id)->with(['tags', 'persons'])->get(Media::LIST_COLUMNS);
+            $favs = Presenter::favMap($access, $media->pluck('id'));
+            foreach ($media as $m) {
+                $out['files'][] = Presenter::media($m, $access, $favs);
+            }
+        }
 
         return response()->json($out);
     }

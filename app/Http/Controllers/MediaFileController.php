@@ -42,11 +42,8 @@ class MediaFileController extends Controller
 
     public function thumb(int $id, int $v, string $sig, Scanner $scanner)
     {
-        if (! Signer::check('t', $id, $v, $sig)) {
-            return $this->fail(404);
-        }
-        $m = Media::find($id);
-        if (! $m || $m->thumb_v !== $v) {
+        $m = Media::withoutGlobalScopes()->find($id);
+        if (! $m || $m->thumb_v !== $v || ! Signer::check(Signer::kind('t', $m->hidden_at !== null), $id, $v, $sig)) {
             return $this->fail(404);
         }
         if (! $m->has_thumb || ! is_file($m->thumbFile())) {
@@ -88,11 +85,8 @@ class MediaFileController extends Controller
     /** Plays the local copy of a video (with Range support). 404 when there is no copy (it was cleaned up). */
     public function video(int $id, int $v, string $sig, string $ext)
     {
-        if (! Signer::check('v', $id, $v, $sig)) {
-            return $this->fail(404);
-        }
-        $m = Media::find($id);
-        $file = $m && $m->thumb_v === $v && Signer::ext($m) === $ext && $m->type === 'video' ? VideoCache::readyFile($m) : null;
+        $m = Media::withoutGlobalScopes()->find($id);
+        $file = $m && Signer::check(Signer::kind('v', $m->hidden_at !== null), $id, $v, $sig) && $m->thumb_v === $v && Signer::ext($m) === $ext && $m->type === 'video' ? VideoCache::readyFile($m) : null;
         if (! $file) {
             return $this->fail(404);
         }
@@ -110,11 +104,8 @@ class MediaFileController extends Controller
 
     public function original(string $mode, int $id, int $v, string $sig, string $ext)
     {
-        if (! Signer::check('o', $id, $v, $sig)) {
-            return $this->fail(404);
-        }
-        $m = Media::find($id);
-        if (! $m || $m->thumb_v !== $v || Signer::ext($m) !== $ext) {
+        $m = Media::withoutGlobalScopes()->find($id);
+        if (! $m || $m->thumb_v !== $v || Signer::ext($m) !== $ext || ! Signer::check(Signer::kind('o', $m->hidden_at !== null), $id, $v, $sig)) {
             return $this->fail(404);
         }
         try {

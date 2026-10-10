@@ -28,7 +28,7 @@
           <select class="v-int" data-v-int title="${esc(t('slideshow_speed'))}">${[3, 5, 10].map((n) => `<option value="${n}" ${n === +PG.pref('slide_interval', 5) ? 'selected' : ''}>${PG.digits(n)}s</option>`).join('')}</select>
           <button class="icon-btn" data-v="panel" title="${esc(t('info'))}">${icon('info')}</button>
           <a class="icon-btn" data-v="dl" title="${esc(t('download'))}" download>${icon('download')}</a>
-          <button class="icon-btn v-del" data-v="del" title="${esc(t('delete'))}" ${opts.onDelete ? '' : 'hidden'}>${icon('trash-2')}</button>
+          <button class="icon-btn v-del" data-v="del" title="${esc(t(opts.restore ? 'restore' : 'delete'))}" ${opts.onDelete ? '' : 'hidden'}>${icon(opts.restore ? 'rotate-ccw' : 'trash-2')}</button>
           <button class="icon-btn" data-v="fs" title="${esc(t('fullscreen'))}">${icon('maximize')}</button>
         </div>
         <div class="v-stage">
@@ -566,6 +566,7 @@
           ${fact(t('changed'), PG.dateHtml(d.ctime))}
           ${fact(t('path'), d.path ? `<code dir="ltr">/${esc(d.path)}</code>` : '')}
         </dl>
+        ${f.type === 'image' && !f.hidden ? `<button class="btn small ghost" type="button" data-set-cover title="${esc(t('set_cover_hint'))}">${icon('image')} ${esc(t('set_cover'))}</button>` : ''}
       </section>
       ${Object.keys(inf).length ? `<section><h3>${icon('camera')} ${esc(t('camera_info'))}</h3><dl class="facts">
         ${['make', 'model', 'lens', 'exposure', 'aperture', 'iso', 'focal', 'flash', 'software', 'codec', 'mime', 'altitude'].map((k) => fact(t(k), inf[k] != null ? esc(inf[k]) : '')).join('')}
@@ -578,6 +579,17 @@
 
   function bindPanel(f, d) {
     const p = V.panel;
+    const cover = p.querySelector('[data-set-cover]');
+    if (cover) {
+      cover.addEventListener('click', async () => {
+        cover.disabled = true;
+        try {
+          await PG.api('POST', `/api/media/${f.id}/cover`);
+          PG.toast(icon('check') + ' ' + esc(t('cover_set')), { timeout: 2500 });
+        } catch (e) { PG.error(e); }
+        cover.disabled = false;
+      });
+    }
     const ta = p.querySelector('[data-desc]');
     ta.addEventListener('input', () => (p.querySelector('[data-desc-foot]').hidden = false));
     p.querySelector('[data-save-desc]').addEventListener('click', async () => {

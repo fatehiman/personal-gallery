@@ -22,7 +22,7 @@ class Media extends Model
     /** Columns needed for listings (everything except the large "exif" JSON). */
     public const LIST_COLUMNS = ['id', 'directory_id', 'path', 'filename', 'ext', 'type', 'size', 'file_mtime', 'file_ctime',
         'scanned_at', 'scan_error', 'width', 'height', 'taken_at', 'camera_make', 'camera_model', 'duration', 'gps_lat', 'gps_lng',
-        'city_en', 'city_fa', 'country_en', 'country_fa', 'has_thumb', 'thumb_v', 'thumb_w', 'thumb_h', 'description', 'rotation'];
+        'city_en', 'city_fa', 'country_en', 'country_fa', 'has_thumb', 'thumb_v', 'thumb_w', 'thumb_h', 'description', 'rotation', 'hidden_at'];
 
     protected function casts(): array
     {

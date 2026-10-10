@@ -44,6 +44,24 @@ class Directory extends Model
         return $dirs->reject(fn ($d) => $checked->has($d->id) && ! $has->has($d->id))->values();
     }
 
+    /**
+     * Pictures chosen by users as the folder image. Only usable ones (visible, with a thumbnail).
+     *
+     * @param  iterable<int>  $dirIds
+     * @return \Illuminate\Support\Collection<int, Media> keyed by directory id
+     */
+    public static function customCovers($dirIds)
+    {
+        $ids = collect($dirIds)->values();
+        if ($ids->isEmpty()) {
+            return collect();
+        }
+
+        return Media::query()->join('folder_covers', 'folder_covers.media_id', '=', 'media.id')
+            ->whereIn('folder_covers.directory_id', $ids)->where('media.has_thumb', true)
+            ->get(['media.id', 'media.thumb_v', 'folder_covers.directory_id as cover_dir'])->keyBy('cover_dir');
+    }
+
     public function media(): HasMany
     {
         return $this->hasMany(Media::class);
