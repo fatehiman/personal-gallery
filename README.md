@@ -38,12 +38,12 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   as 0..1 coordinates, ready for automatic face detection later. Name lists suggest existing names after 500 ms of no
   typing, and match any part of a name (`ja` finds `Mrs. Janet Jackson`).
 - **Videos**: first frame as thumbnail (ffmpeg), playback with Video.js, duration, codec, GPS from phone videos.
-- **Delete** (all users): a red cross on photos and videos (on hover) and on folders, and a trash button in the viewer.
-  A simple confirmation is asked, then the item disappears at once (no reload). For the user it is a permanent delete.
+- **Delete** (all users): a trash button in the viewer, and the **Select** mode (mark items, then *Delete selected*).
+  There is no delete icon on the thumbnails. A simple confirmation is asked, then the item disappears at once (no reload). For the user it is a permanent delete.
   In fact the file is only **hidden for everybody** (`media.hidden_at`, `hidden_by`); nothing is changed on the storage
   box. Later the main admin will be able to delete the hidden files for real. The **Select** button lets users mark
   several photos, videos and folders (a folder means all its photos and videos, also in sub folders) and delete them
-  together. Select and the delete icons are not shown in the two smallest views (Mosaic, Small tiles).
+  together. Select is not shown in the two smallest views (Mosaic, Small tiles).
 - **Empty folders are not shown** (for everybody): a folder that was read and has no sub folder and no visible photo or
   video. A folder that was never read is shown until it is known. A folder that has only empty sub folders is still shown.
 - **Favorites**, **On this day** (photos taken on today's date in past years, only from **flagged folders**), **Map** of photos with GPS

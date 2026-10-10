@@ -224,15 +224,10 @@
     return `<button type="button" class="${state.view === 'list' || state.view === 'details' ? 'icon-btn' : 'scan-mini'}" data-scan-path="${esc(it.path)}" data-name="${esc(it.name)}" title="${esc(run ? t('stop_scan') : t('scan'))}">${icon(run ? 'circle-stop' : 'scan-search')}</button>`;
   };
 
-  // Delete (really: hide, but the user must believe it is a delete) and select marks.
+  // Select marks. Delete is only in the viewer and in select mode (no delete icon on the thumbnails).
   const selKey = (it) => (it.kind === 'folder' ? 'd:' + it.path : 'f:' + it.id);
   const selCls = (it) => (state.sel.has(selKey(it)) ? 'selected' : '');
   const selBox = () => `<span class="sel-box">${icon('check')}</span>`;
-  const delBtn = (it) => {
-    if (state.mode !== 'browse' && it.kind === 'folder') return '';
-    const attr = it.kind === 'folder' ? `data-del-path="${esc(it.path)}"` : `data-del-id="${it.id}"`;
-    return `<span role="button" tabindex="0" class="del-x" ${attr} title="${esc(t('delete'))}" aria-label="${esc(t('delete'))}">${icon('x')}</span>`;
-  };
 
   // "On this day" flag of a folder (all users). Shown on hover; filled when the folder is flagged.
   const otdBtn = (it) => {
@@ -247,7 +242,7 @@
       const count = it.count != null ? `<span class="count">${PG.num(it.count)}</span>` : '';
       const sub = state.mode === 'search' && it.parentName ? esc(it.parentName) : it.mtime ? PG.dateHtml(it.mtime, false) : '&nbsp;';
       return `<a class="tile folder ${color(i)} ${selCls(it)}" href="${browseUrl(it.path)}" data-nav="${esc(it.path)}">
-        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}${selBox()}${delBtn(it)}
+        <div class="thumb">${icon('folder', 'ph')}${cover}${count}</div>${scanBtn(it)}${otdBtn(it)}${selBox()}
         <div class="label">${esc(it.name)}<small>${sub}</small></div></a>`;
     }
     const fi = it.fi;
@@ -261,7 +256,7 @@
       ? esc(it.folderName || '') : PG.dateHtml(it.taken || it.mtime, false);
     // A description replaces the file name on the tile (one line, cut with "…").
     return `<button type="button" class="tile file ${color(i)} ${it.err ? 'err' : ''} ${it.desc ? 'has-desc' : ''} ${selCls(it)}" data-file="${fi}" id="f${it.id}" title="${esc(it.name)}">
-      <div class="thumb">${ph}${img}${play}${ext}</div>${selBox()}${delBtn(it)}<div class="badge-row">${badges}</div>
+      <div class="thumb">${ph}${img}${play}${ext}</div>${selBox()}<div class="badge-row">${badges}</div>
       <div class="label"><span class="lbl" dir="${PG.textDir(it.desc || it.name)}">${esc(it.desc || it.name)}</span><small>${sub}</small></div></button>`;
   }
 
@@ -272,7 +267,7 @@
   }
 
   function rowHtml(it, i) {
-    const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}${delBtn(it)}</td>`;
+    const admin = `<td class="act">${scanBtn(it)}${otdBtn(it)}</td>`;
     if (it.kind === 'folder') {
       const nm = `<div class="nm ${color(i)}">${selBox()}${icon('folder')}<span>${esc(it.name)}</span>${state.mode === 'search' && it.parentName ? `<small class="muted">— ${esc(it.parentName)}</small>` : ''}</div>`;
       const cnt = it.count != null ? esc(t('items', { n: PG.num(it.count) })) : '';
@@ -281,7 +276,7 @@
     }
     const fi = it.fi;
     if (state.view === 'list') {
-      return `<tr class="${selCls(it)}" data-file="${fi}" id="f${it.id}"><td><div class="nm">${selBox()}${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td class="act">${delBtn(it)}</td></tr>`;
+      return `<tr class="${selCls(it)}" data-file="${fi}" id="f${it.id}"><td><div class="nm">${selBox()}${icon(typeIcon(it))}<span>${esc(it.name)}</span></div></td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td><td></td></tr>`;
     }
     // Details: a small thumbnail only when it already exists (no storage read).
     const th = it.thumb && it.ready ? `<img data-src="${esc(it.thumb)}" data-ready="1" alt="">` : icon(typeIcon(it));
@@ -290,7 +285,7 @@
     const chips = (a) => `<div class="tg">${(a || []).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>`;
     return `<tr class="${selCls(it)}" data-file="${fi}" id="f${it.id}"><td><div class="nm">${selBox()}${th}<span>${esc(it.name)}</span></div></td>
       <td class="dt">${PG.dateHtml(it.taken)}</td><td class="num">${dim}</td><td class="num">${PG.size(it.size)}</td><td class="dt">${PG.dateHtml(it.mtime)}</td>
-      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td><td class="act">${delBtn(it)}</td></tr>`;
+      <td>${esc(it.camera || '')}</td><td>${esc(loc)}</td><td>${chips(it.tags)}</td><td>${chips(it.persons)}</td><td class="desc" dir="${PG.textDir(it.desc)}" title="${esc(it.desc || '')}">${esc(it.desc || '')}</td><td></td></tr>`;
   }
 
   // ---------------------------------------------------------------- lazy loading
@@ -630,12 +625,6 @@
 
   // ---------------------------------------------------------------- events
   root.addEventListener('click', (e) => {
-    const delB = e.target.closest('[data-del-id], [data-del-path]');
-    if (delB) {
-      e.preventDefault(); e.stopPropagation();
-      deleteItems(delB.dataset.delId ? [+delB.dataset.delId] : [], delB.dataset.delPath ? [delB.dataset.delPath] : []);
-      return;
-    }
     if (state.selecting && e.target.closest('.tile, tr[data-file], tr[data-nav-row]')) { e.preventDefault(); e.stopPropagation(); toggleSel(e.target); return; }
     const otdB = e.target.closest('[data-otd-path]');
     if (otdB) { e.preventDefault(); e.stopPropagation(); toggleOtd(otdB); return; }
