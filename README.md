@@ -106,11 +106,17 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
 `gallery:crawl` runs from the scheduler every **3 minutes** and works about **20 seconds** (setting), then stops.
 It goes through all folders in a fixed order (depth first, by name) and remembers the position (`settings.crawl_pos`).
 
-- For each folder it makes **one `stat` call**. If the folder date is the same as in the DB, nothing was added or
-  removed, and it goes on to the next folder at once.
-- If the date changed (or the folder was never listed) it reads the listing, and reads (scan: EXIF + thumbnail) the
+- For each folder it makes **one `stat` call**. If the folder date is the same as at the folder's **own** last listing
+  (`directories.listed_mtime`, taken just before that listing), nothing was added or removed, and it goes on to the
+  next folder at once. (`directories.mtime` is the date shown to users; the parent's listing also updates it, so it is
+  not used for this check.)
+- If the date changed, the folder was never listed, or its last listing is older than **7 days** (finds files that were
+  overwritten in place: that does not change the folder date), it reads the listing, and reads (scan: EXIF + thumbnail) the
   files that were never read. A file with the same path and the same **size in bytes** is never read again, even when
   its date changed (only a different size triggers a new read). If the time is over, it continues in the same folder 3 minutes later.
+- A new file is started only inside the ~20 seconds. A **video** (ffprobe + first frame, read from the slow storage) may
+  go on after that, but a run never works more than **150 seconds** (`Crawler::MAX_SECONDS`), so it always ends before
+  the next run. A video that cannot be read in that time is marked with an error (`scan_error`) and counted in *errors*.
 - At the end of the tree it starts again from the first folder. After the first rounds it only finds new files and folders.
 - Every run writes **one line** to the log (`crawl_logs`), shown on *Scan jobs* (last 300 runs; lines older than 10 days
   are deleted): time, seconds, from/to folder, folders checked, new files, files read, errors, result.
@@ -119,7 +125,8 @@ It goes through all folders in a fixed order (depth first, by name) and remember
   originals that are read from the storage) saves the time in `settings.last_user_browsing` (written at most every
   10 s; `App\Gallery\Activity`). The automatic polls (`/api/health`, admin scan status) do not count. While the last
   activity is **less than 5 minutes** old, the crawler does nothing (log note `paused: a user is browsing`), and a
-  run that is already working stops at the next folder or file (`stopped: a user started browsing`). The 3-minute
+  run that is already working stops at the next folder or file (`stopped: a user started browsing`). A long video read
+  is stopped too (checked every 2 s); that video is not marked and is read again later. The 3-minute
   rhythm continues by itself 5 minutes after the last user activity.
 
 ## Time zones

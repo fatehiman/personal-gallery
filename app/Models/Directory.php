@@ -7,11 +7,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Directory extends Model
 {
-    protected $fillable = ['path_hash', 'path', 'name', 'parent_id', 'mtime', 'dir_count', 'file_count', 'listed_at'];
+    protected $fillable = ['path_hash', 'path', 'name', 'parent_id', 'mtime', 'dir_count', 'file_count', 'listed_at', 'listed_mtime'];
 
     protected function casts(): array
     {
-        return ['mtime' => 'datetime', 'listed_at' => 'datetime'];
+        return ['mtime' => 'datetime', 'listed_at' => 'datetime', 'listed_mtime' => 'integer'];
     }
 
     public static function hashPath(string $path): string

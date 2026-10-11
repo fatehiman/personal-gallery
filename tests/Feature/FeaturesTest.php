@@ -164,6 +164,100 @@ class FeaturesTest extends TestCase
         $this->assertSame(2, Settings::int('crawl_cycles', 0));
     }
 
+    public function test_crawler_finds_new_files_in_a_sub_folder_after_the_parent_was_listed(): void
+    {
+        app(Crawler::class)->run(15);
+        $this->assertSame(1, Settings::int('crawl_cycles', 0));
+
+        // New file in A/B (only the date of A/B changes), then the parent A is listed (a user opens it):
+        // that listing also saves the new date of A/B. The crawler must still list A/B again.
+        imagejpeg(imagecreatetruecolor(50, 50), $this->root.'/A/B/new.jpg');
+        $newDate = time() + 5;
+        touch($this->root.'/A/B', $newDate);
+        app(\App\Gallery\Indexer::class)->sync('A', true);
+        $this->assertSame($newDate, Directory::findByPath('A/B')->mtime->timestamp);
+
+        app(Crawler::class)->run(15);
+        $this->assertTrue((bool) Media::where('path', 'A/B/new.jpg')->whereNotNull('scanned_at')->exists());
+    }
+
+    public function test_crawler_lists_a_folder_again_after_some_days_to_find_overwritten_files(): void
+    {
+        app(Crawler::class)->run(15);
+        $m = Media::where('path', 'A/top.jpg')->firstOrFail();
+        [$oldSize, $oldV] = [(int) $m->size, (int) $m->thumb_v];
+        $mtimeA = filemtime($this->root.'/A');
+
+        file_put_contents($this->root.'/A/top.jpg', 'x', FILE_APPEND); // same name, new size, folder date unchanged
+        touch($this->root.'/A', $mtimeA);
+        app(Crawler::class)->run(15);
+        $this->assertSame($oldSize, (int) $m->refresh()->size); // folder date unchanged: not listed
+
+        Directory::where('path', 'A')->update(['listed_at' => now()->subDays(Crawler::RECHECK_DAYS + 1)]);
+        app(Crawler::class)->run(15);
+        $m->refresh();
+        $this->assertSame($oldSize + 1, (int) $m->size);
+        $this->assertSame($oldV + 1, (int) $m->thumb_v);
+        $this->assertNotNull($m->scanned_at); // read again in the same run
+    }
+
+    public function test_long_video_reads_stop_at_the_deadline_or_when_a_user_starts_browsing(): void
+    {
+        $scanner = app(\App\Gallery\Scanner::class);
+        $run = new \ReflectionMethod($scanner, 'runProcess');
+        $set = function (?float $deadline, ?\Closure $abort) use ($scanner) {
+            (new \ReflectionProperty($scanner, 'deadline'))->setValue($scanner, $deadline);
+            (new \ReflectionProperty($scanner, 'abort'))->setValue($scanner, $abort);
+        };
+        $sleep = fn () => new \Symfony\Component\Process\Process([PHP_BINARY, '-r', 'sleep(20);']);
+
+        $set(microtime(true) + 2, null);
+        $t = microtime(true);
+        try {
+            $run->invoke($scanner, $sleep(), 60);
+            $this->fail('no timeout');
+        } catch (\Symfony\Component\Process\Exception\ProcessTimedOutException) {
+        }
+        $this->assertLessThan(6, microtime(true) - $t);
+
+        $set(microtime(true) + 0.5, null); // less than 1 s left: do not start at all
+        try {
+            $run->invoke($scanner, $sleep(), 60);
+            $this->fail('started without time');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('no time left', $e->getMessage());
+        }
+
+        $set(null, fn () => true);
+        $t = microtime(true);
+        $this->expectException(\App\Gallery\ScanAbortedException::class);
+        try {
+            $run->invoke($scanner, $sleep(), 60);
+        } finally {
+            $this->assertLessThan(6, microtime(true) - $t);
+        }
+    }
+
+    public function test_telegram_upload_works_and_falls_back_to_a_document(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk();
+        $day = Carbon::now(config('app.display_timezone'));
+        Media::where('path', 'A/top.jpg')->update(['taken_at' => $day->copy()->subYears(3)->format('Y-m-d 12:00:00')]);
+        OtdFolders::for($admin)->set('A', true);
+        Settings::set('otd_min_years', 2);
+        Settings::set('telegram_token', '123:abc');
+        Settings::set('telegram_chat', '-100');
+        \Illuminate\Support\Facades\Http::fake([
+            'api.telegram.org/*/sendPhoto' => \Illuminate\Support\Facades\Http::response(['ok' => false], 400),
+            'api.telegram.org/*' => \Illuminate\Support\Facades\Http::response(['ok' => true]),
+        ]);
+
+        $r = app(TelegramDigest::class)->send($day);
+        $this->assertSame(['sent' => 1, 'failed' => 0, 'skipped' => 0], $r);
+        \Illuminate\Support\Facades\Http::assertSent(fn ($req) => str_ends_with($req->url(), '/sendDocument'));
+    }
+
     public function test_crawler_stops_when_time_is_over_and_continues_in_the_same_place(): void
     {
         app(Crawler::class)->run(0);

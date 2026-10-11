@@ -12,12 +12,15 @@ use Throwable;
 /**
  * The slow background walk: every few minutes it works for a few seconds (about 20), then stops.
  * It goes through all folders in a fixed order (depth first, by name) and remembers where it stopped.
- * In each folder it first checks the folder date (one stat call). Only when the date changed (or the folder
- * was never listed) it reads the listing again, and it reads (scans) the files that were never read.
+ * In each folder it first checks the folder date (one stat call). Only when the date changed since the folder's own
+ * last listing (directories.listed_mtime), or the folder was never listed, or its last listing is older than
+ * RECHECK_DAYS, it reads the listing again. Then it reads (scans) the files that were never read.
  * A file with the same path and size is never read again, whatever its date says (see Indexer).
  * At the end of the tree it starts again from the beginning. So after the first rounds it only finds new files.
  * Users have priority: while a user was active in the last 5 minutes (see Activity) it does nothing, and it stops
  * at once when a user starts browsing during a run. The 3-minute rhythm continues 5 minutes after the last activity.
+ * A new file is started only inside the budget (about 20 s). A video can take longer (ffprobe + first frame on the
+ * slow storage); it may go on after the budget, but a run never works more than MAX_SECONDS (below the 3 minutes).
  * Every run writes one line to crawl_logs (kept 10 days).
  */
 class Crawler
@@ -25,6 +28,15 @@ class Crawler
     public const POS = 'crawl_pos';
 
     public const LOG_DAYS = 10;
+
+    /** Hard limit of one run (seconds), also for a long video. The next run starts 180 s after this one. */
+    public const MAX_SECONDS = 150;
+
+    /**
+     * List a folder again after this many days even when its date did not change. A file that is overwritten
+     * in place (same name, new size) does not change the folder date, so only a new listing finds it.
+     */
+    public const RECHECK_DAYS = 7;
 
     /** @var array{folders:int, listed:int, scanned:int, errors:int} */
     private array $stats;
@@ -52,7 +64,7 @@ class Crawler
         $this->stats = ['folders' => 0, 'listed' => 0, 'scanned' => 0, 'errors' => 0];
         $note = null;
         try {
-            $note = $this->walk($budget ?? self::seconds());
+            $note = $this->walk($budget ?? self::seconds(), $t0 + self::MAX_SECONDS);
         } catch (Throwable $e) {
             report($e);
             $note = 'error: '.mb_substr($e->getMessage(), 0, 120);
@@ -71,8 +83,11 @@ class Crawler
         DB::table('crawl_logs')->where('started_at', '<', now()->subDays(self::LOG_DAYS))->delete();
     }
 
-    /** @return string why it stopped */
-    private function walk(int $budget): string
+    /**
+     * @param  float  $hardEnd  unix time: nothing (also no video) works after this
+     * @return string why it stopped
+     */
+    private function walk(int $budget, float $hardEnd): string
     {
         if (ScanJob::active()) {
             return 'paused: admin scan is running'; // it does the same work, do not read twice
@@ -83,8 +98,9 @@ class Crawler
         if (! Health::ok(true)) {
             return 'storage not available';
         }
-        $end = time() + $budget;
+        $end = min(time() + $budget, (int) $hardEnd);
         $slots = new ReadSlots;
+        $userBrowsing = fn () => Activity::recent();
         $pos = (string) Settings::get(self::POS, '');
 
         try {
@@ -112,12 +128,14 @@ class Crawler
                         return 'read slots busy';
                     }
                     try {
-                        $ok = $this->scanner->scan($m);
+                        // A video may need more than the budget, but never more than the hard end of the run.
+                        $ok = $this->scanner->scan($m, $hardEnd, $userBrowsing);
                     } finally {
                         $slots->release();
                     }
                     if ($m->scanned_at === null) {
-                        return 'storage not available'; // same folder again next time
+                        // Not marked: the same file again next time.
+                        return Activity::recent() ? 'stopped: a user started browsing' : 'storage not available';
                     }
                     $this->stats['scanned']++;
                     $ok || $this->stats['errors']++;
@@ -152,7 +170,10 @@ class Crawler
             Paths::assertAvailable();
             $dir = Directory::findByPath($path);
             $st = @stat(Paths::abs($path));
-            if ($dir && $st && $dir->listed_at && $dir->mtime && $dir->mtime->timestamp === $st['mtime']) {
+            // listed_mtime, not mtime: the listing of the parent folder also updates mtime (the date shown to users),
+            // which made a changed sub folder look unchanged.
+            if ($dir && $st && $dir->listed_at && $dir->listed_mtime === $st['mtime']
+                && $dir->listed_at->gt(now()->subDays(self::RECHECK_DAYS))) {
                 return $dir; // nothing was added or removed here
             }
             $this->stats['listed']++;

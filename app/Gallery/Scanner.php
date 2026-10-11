@@ -19,11 +19,22 @@ class Scanner
 {
     private const JUNK_DESCRIPTIONS = '/^(OLYMPUS DIGITAL CAMERA|SONY DSC|DCIM|default|Picture|Image|SAMSUNG|LG Electronics|\s*)$/i';
 
-    public function scan(Media $m): bool
+    /** Unix time (float) when ffprobe/ffmpeg must stop, or null (their own timeouts only). */
+    private ?float $deadline = null;
+
+    /** Asked every 2 s while ffprobe/ffmpeg runs; true stops the read (the file is not marked). */
+    private ?\Closure $abort = null;
+
+    /**
+     * @param  float|null  $deadline  the background crawler gives its hard end time: a video is stopped there
+     * @param  \Closure|null  $abort  the background crawler stops a long video read when a user starts browsing
+     */
+    public function scan(Media $m, ?float $deadline = null, ?\Closure $abort = null): bool
     {
         @set_time_limit(180);
         $abs = Paths::abs($m->path);
         $data = ['scanned_at' => now(), 'scan_error' => null];
+        [$this->deadline, $this->abort] = [$deadline, $abort];
         try {
             Paths::assertAvailable();
             if (! is_file($abs)) {
@@ -34,7 +45,7 @@ class Scanner
             } elseif ($m->type === 'video') {
                 $data += $this->scanVideo($m, $abs);
             }
-        } catch (StorageUnavailableException $e) {
+        } catch (StorageUnavailableException|ScanAbortedException $e) {
             return false; // try again later, do not mark as scanned
         } catch (Throwable $e) {
             // A read error during an outage is not the file's fault: do not mark it, try again later.
@@ -44,6 +55,8 @@ class Scanner
             }
             $data['scan_error'] = mb_substr($e->getMessage(), 0, 250);
             report($e);
+        } finally {
+            [$this->deadline, $this->abort] = [null, null];
         }
 
         $import = $data['_import'] ?? null;
@@ -252,7 +265,7 @@ class Scanner
             return $out;
         }
         $p = new Process([config('gallery.ffprobe'), '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', $abs]);
-        $p->setTimeout(60)->run();
+        $this->runProcess($p, 60);
         $probe = json_decode($p->getOutput(), true) ?: [];
         $format = $probe['format'] ?? [];
         $tags = array_change_key_case($format['tags'] ?? []);
@@ -297,21 +310,53 @@ class Scanner
 
         // First frame (a little after the start, the very first frame is often black).
         $tmp = tempnam(sys_get_temp_dir(), 'pgv').'.jpg';
-        foreach ([$duration > 2 ? 1 : 0, 0] as $at) {
-            $p = new Process([config('gallery.ffmpeg'), '-v', 'error', '-y', '-ss', (string) $at, '-i', $abs, '-frames:v', '1',
-                '-vf', sprintf("scale=w='min(%1\$d,iw)':h='min(%1\$d,ih)':force_original_aspect_ratio=decrease", config('gallery.thumb_size')), '-q:v', '3', $tmp]);
-            $p->setTimeout(90)->run();
-            if (is_file($tmp) && filesize($tmp) > 0) {
-                break;
+        try {
+            foreach ([$duration > 2 ? 1 : 0, 0] as $at) {
+                $p = new Process([config('gallery.ffmpeg'), '-v', 'error', '-y', '-ss', (string) $at, '-i', $abs, '-frames:v', '1',
+                    '-vf', sprintf("scale=w='min(%1\$d,iw)':h='min(%1\$d,ih)':force_original_aspect_ratio=decrease", config('gallery.thumb_size')), '-q:v', '3', $tmp]);
+                $this->runProcess($p, 90);
+                if (is_file($tmp) && filesize($tmp) > 0) {
+                    break;
+                }
             }
+            if (is_file($tmp) && filesize($tmp) > 0 && ($img = @imagecreatefromjpeg($tmp))) {
+                $out += $this->saveThumb($m, $img);
+            }
+        } finally {
+            @unlink($tmp);
+            @unlink(substr($tmp, 0, -4));
         }
-        if (is_file($tmp) && filesize($tmp) > 0 && ($img = @imagecreatefromjpeg($tmp))) {
-            $out += $this->saveThumb($m, $img);
-        }
-        @unlink($tmp);
-        @unlink(substr($tmp, 0, -4));
 
         return $out;
+    }
+
+    /**
+     * Run ffprobe/ffmpeg for at most $timeout seconds, and never past the deadline (if one is given).
+     * A timeout throws (the file is marked with the error). The abort check throws ScanAbortedException.
+     */
+    private function runProcess(Process $p, int $timeout): void
+    {
+        $limit = (float) $timeout;
+        if ($this->deadline !== null) {
+            $limit = min($limit, $this->deadline - microtime(true));
+            if ($limit < 1) {
+                throw new \RuntimeException('Timed out: no time left in this background run');
+            }
+        }
+        $p->setTimeout($limit);
+        $p->start();
+        $nextCheck = microtime(true) + 2;
+        while ($p->isRunning()) {
+            usleep(100_000);
+            $p->checkTimeout(); // stops the process and throws ProcessTimedOutException
+            if ($this->abort && microtime(true) >= $nextCheck) {
+                $nextCheck = microtime(true) + 2;
+                if (($this->abort)()) {
+                    $p->stop(1);
+                    throw new ScanAbortedException('Stopped: a user started browsing');
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- helpers

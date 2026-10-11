@@ -120,22 +120,32 @@ class TelegramDigest
         if ($m->type === 'video') {
             $params['supports_streaming'] = 'true';
         }
+        $ok = $this->callWithFile($token, $method, $params, $field, $abs, $m->filename);
+        if (! $ok && $method === 'sendPhoto') {
+            // Telegram refuses some photos (very large dimensions): send the same file as a document.
+            unset($params['supports_streaming']);
+            $ok = $this->callWithFile($token, 'sendDocument', $params, 'document', $abs, $m->filename);
+        }
+
+        return $ok;
+    }
+
+    /**
+     * Upload one file. The HTTP client closes the file handle itself after the request, so every call opens
+     * its own handle, and it is closed here only when it is still open (fclose on a closed handle throws).
+     */
+    private function callWithFile(string $token, string $method, array $params, string $field, string $abs, string $name): bool
+    {
         $fh = fopen($abs, 'rb');
         if (! $fh) {
             return false;
         }
         try {
-            $ok = $this->call($token, $method, $params, [$field, $fh, $m->filename]);
-            if (! $ok && $method === 'sendPhoto') {
-                // Telegram refuses some photos (very large dimensions): send the same file as a document.
-                rewind($fh);
-                unset($params['supports_streaming']);
-                $ok = $this->call($token, 'sendDocument', $params, ['document', $fh, $m->filename]);
-            }
-
-            return $ok;
+            return $this->call($token, $method, $params, [$field, $fh, $name]);
         } finally {
-            fclose($fh);
+            if (is_resource($fh)) {
+                fclose($fh);
+            }
         }
     }
 

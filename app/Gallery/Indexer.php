@@ -52,6 +52,9 @@ class Indexer
             }
             throw new NotFoundHttpException;
         }
+        // The folder date BEFORE the listing: a file added during the listing changes the date again,
+        // so the crawler lists the folder once more next time (with the date after, it would be missed).
+        $before = @stat($abs);
         $names = @scandir($abs);
         if ($names === false) {
             // Read error (network?): keep what we have, never delete on errors.
@@ -84,15 +87,15 @@ class Indexer
             // Symlinks and special files are ignored on purpose.
         }
 
-        DB::transaction(function () use ($dir, $rel, $subdirs, $files) {
+        DB::transaction(function () use ($dir, $rel, $subdirs, $files, $before) {
             $this->syncSubdirs($dir, $rel, $subdirs);
             $this->syncFiles($dir, $rel, $files);
-            $st = @stat(Paths::abs($rel));
             $dir->forceFill([
                 'listed_at' => now(),
+                'listed_mtime' => $before ? $before['mtime'] : null,
                 'dir_count' => count($subdirs),
                 'file_count' => count($files),
-                'mtime' => $st ? Carbon::createFromTimestamp($st['mtime']) : null,
+                'mtime' => $before ? Carbon::createFromTimestamp($before['mtime']) : null,
             ])->save();
         });
 

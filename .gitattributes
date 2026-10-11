@@ -9,3 +9,7 @@
 /.github export-ignore
 CHANGELOG.md export-ignore
 .styleci.yml export-ignore
+
+# Never deployed (git archive skips them), but committed to GitHub.
+reference-docs/ export-ignore
+*.md export-ignore
