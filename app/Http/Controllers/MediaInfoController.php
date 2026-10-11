@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Gallery\Access;
 use App\Gallery\Presenter;
+use App\Gallery\ReadSlots;
 use App\Gallery\Scanner;
 use App\Gallery\Signer;
 use App\Gallery\VideoCache;
@@ -57,21 +58,32 @@ class MediaInfoController extends Controller
         return response()->json($out);
     }
 
-    /** Video playback: state of the local copy (copying / ready / error). */
+    /** Video playback: state of the local copy (copying / converting / ready / error). w = the viewer's token. */
     public function videoStatus(Request $request, int $media)
     {
-        return response()->json($this->videoReply(VideoCache::status($this->video($request, $media))));
+        return response()->json($this->videoReply(VideoCache::status($this->video($request, $media), $this->watcher($request))));
     }
 
-    /** Start copying the video to the server (background). Checks the free disk space first. */
+    /**
+     * Start copying the video to the server (background), and converting it when the browser cannot play it.
+     * Checks the free disk space first. convert=1: the browser failed to play the copy, convert it.
+     */
     public function videoStart(Request $request, int $media)
     {
-        return response()->json($this->videoReply(VideoCache::start($this->video($request, $media))));
+        return response()->json($this->videoReply(VideoCache::start($this->video($request, $media), $this->watcher($request), $request->boolean('convert'))));
     }
 
-    public function videoCancel(Request $request, int $media)
+    /** The viewer left the video (or pressed Cancel): stop the work and delete the files when nobody else watches. */
+    public function videoLeave(Request $request, int $media)
     {
-        return response()->json($this->videoReply(VideoCache::cancel($this->video($request, $media))));
+        return response()->json($this->videoReply(VideoCache::leave($this->video($request, $media), $this->watcher($request))));
+    }
+
+    private function watcher(Request $request): ?string
+    {
+        $w = (string) $request->input('w', '');
+
+        return preg_match('/^[A-Za-z0-9]{8,40}$/', $w) ? $w : null;
     }
 
     private function video(Request $request, int $id): Media
@@ -98,7 +110,7 @@ class MediaInfoController extends Controller
         abort_unless($m->type === 'image' && $m->hidden_at === null, 422);
         if (! $m->has_thumb) {
             // Make the thumbnail now (reads the file once, through the read slots).
-            $slots = new \App\Gallery\ReadSlots;
+            $slots = new ReadSlots;
             abort_unless($slots->acquire(15), 503);
             try {
                 $scanner->scan($m->refresh());

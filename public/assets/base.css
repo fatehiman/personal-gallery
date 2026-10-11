@@ -373,6 +373,10 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .v-copy .ring-fg { stroke: #fff; stroke-linecap: round; transition: stroke-dashoffset .6s linear; }
 .v-copy .ring-text { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 22px; font-size: .95rem; direction: ltr; }
 .v-copy-meta { display: flex; gap: 14px; align-items: center; opacity: .9; }
+.v-copy-step { font-size: .78rem; font-weight: 700; letter-spacing: .02em; padding: 3px 12px; border-radius: 999px; background: rgba(255, 255, 255, .18); }
+.v-copy .ring.conv .ring-fg { stroke: var(--p2); }
+.v-copy .ring.wait .ring-fg { stroke: var(--p4); }
+.v-copy-msg .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 .v-copy-meta .ic { width: 16px; height: 16px; vertical-align: -3px; }
 .v-copy-msg { text-align: center; max-width: 320px; background: var(--surface); color: var(--text); padding: 22px; border-radius: var(--card-radius); }
 .v-copy-msg .ic { width: 44px; height: 44px; color: var(--p0d); }

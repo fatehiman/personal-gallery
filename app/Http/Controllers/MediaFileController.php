@@ -84,19 +84,22 @@ class MediaFileController extends Controller
         ]);
     }
 
-    /** Plays the local copy of a video (with Range support). 404 when there is no copy (it was cleaned up). */
+    /**
+     * Plays the local copy (or the converted MP4) of a video, with Range support. 404 when there is none (it was
+     * cleaned up, or it was converted meanwhile and the extension changed).
+     */
     public function video(int $id, int $v, string $sig, string $ext)
     {
         $m = Media::withoutGlobalScopes()->find($id);
-        $file = $m && Signer::check(Signer::kind('v', $m->hidden_at !== null), $id, $v, $sig) && $m->thumb_v === $v && Signer::ext($m) === $ext && $m->type === 'video' ? VideoCache::readyFile($m) : null;
-        if (! $file) {
+        $file = $m && Signer::check(Signer::kind('v', $m->hidden_at !== null), $id, $v, $sig) && $m->thumb_v === $v && $m->type === 'video' ? VideoCache::readyFile($m) : null;
+        if (! $file || VideoCache::urlExt($m, $file) !== $ext) {
             return $this->fail(404);
         }
         @touch($file); // in use
         @set_time_limit(0);
         session_write_close();
         $r = new BinaryFileResponse($file, 200, [
-            'Content-Type' => self::MIME[$m->ext] ?? 'application/octet-stream',
+            'Content-Type' => VideoCache::mime($m, $file),
             'Cache-Control' => 'private, max-age=0',
         ], false, null, false, false);
         $r->setAutoEtag(false);

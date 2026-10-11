@@ -54,7 +54,7 @@
   function close(fromPop) {
     if (!V) return;
     const v = V;
-    abortCopy(v);
+    leaveVideo(v);
     V = null;
     stopSlideshow(v);
     if (v.player) { try { v.player.dispose(); } catch (e) { /* */ } }
@@ -75,7 +75,7 @@
     const n = V.files.length;
     V.index = (i + n) % n;
     const f = cur();
-    abortCopy(V);
+    leaveVideo(V, f.id);
     V.zoom = 1; V.px = 0; V.py = 0; setDrawing(false);
     if (V.player) { try { V.player.dispose(); } catch (e) { /* */ } V.player = null; }
     V.el.querySelector('.v-prev').hidden = V.el.querySelector('.v-next').hidden = n < 2;
@@ -191,25 +191,42 @@
       noPreview(f, slide);
       return;
     }
-    prepareVideo(f, slide).then((url) => { if (url && V && V.slide === slide) playVideo(f, slide, frame, url); });
+    prepareVideo(f, slide).then((st) => { if (st && V && V.slide === slide) playVideo(f, slide, frame, st); });
   }
 
   // ---------------------------------------------------------------- video: copy to the server first, then play from there
+  // Formats that browsers cannot play are converted to MP4 on the server after the copy (step 1 copy, step 2 convert).
+  // While a video is shown, the viewer says "still watching" every 30 s; when it leaves, the server deletes the files.
   const GB = 1073741824, MB = 1048576;
   const copySize = (c, total) => PG.digits(total >= GB ? `${(c / GB).toFixed(1)}/${(total / GB).toFixed(1)} GB` : `${Math.round(c / MB)}/${Math.max(1, Math.round(total / MB))} MB`);
   const hhmm = (s) => PG.digits(String(Math.floor(s / 3600)).padStart(2, '0') + ':' + String(Math.floor((s % 3600) / 60)).padStart(2, '0'));
+  const mmss = (s) => PG.digits((s >= 3600 ? Math.floor(s / 3600) + ':' : '') + String(Math.floor((s % 3600) / 60)).padStart(s >= 3600 ? 2 : 1, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0'));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const RING = 2 * Math.PI * 54;
+  const VTOKEN = (Math.random().toString(36).slice(2) + Date.now().toString(36)).replace(/[^a-z0-9]/g, '').slice(0, 32);
+  const vurl = (id) => `/api/media/${id}/video?w=${VTOKEN}`;
 
-  function abortCopy(v) {
-    if (v && v.copy) {
-      v.copy.cancelled = true;
-      PG.api('DELETE', `/api/media/${v.copy.id}/video`).catch(() => {});
-      v.copy = null;
-    }
+  // The viewer leaves the video (next, previous, close): stop a running copy/conversion, let the server delete the files.
+  // keepId: the next slide shows the same video (no leave message, it would race with the new start).
+  function leaveVideo(v, keepId) {
+    if (!v) return;
+    if (v.copy) v.copy.cancelled = true;
+    if (v.watch) clearInterval(v.watch.timer);
+    const id = v.copy ? v.copy.id : v.watch ? v.watch.id : null;
+    v.copy = null; v.watch = null;
+    if (id && id !== keepId) PG.api('DELETE', vurl(id)).catch(() => {});
   }
 
-  // Returns the URL of the local copy, or null (error, cancelled, or the user went away).
+  // Page closed or reloaded: tell the server too (a beacon can only POST).
+  window.addEventListener('pagehide', () => {
+    const id = V && (V.copy ? V.copy.id : V.watch ? V.watch.id : null);
+    if (!id || !navigator.sendBeacon) return;
+    const fd = new FormData();
+    fd.append('_token', PG.cfg.csrf); fd.append('w', VTOKEN);
+    navigator.sendBeacon(`/api/media/${id}/video/leave`, fd);
+  });
+
+  // Returns the "ready" status (url, mime, converted), or null (error, cancelled, or the user went away).
   async function prepareVideo(f, slide) {
     const box = document.createElement('div');
     box.className = 'v-copy';
@@ -218,52 +235,61 @@
     V.copy = job;
     const stop = () => !V || V.slide !== slide || job.cancelled;
     const retryBtn = () => `<button class="btn primary" type="button" data-copy="retry">${icon('refresh-cw')} ${esc(t('video_retry'))}</button>`;
+    const dlBtn = () => (f.dl ? `<a class="btn ghost" href="${esc(f.dl)}" download>${icon('download')} ${esc(t('download'))}</a>` : '');
     const message = (text, extra = '') => {
-      box.innerHTML = `<div class="v-copy-msg">${icon('circle-help')}<p>${esc(text)}</p>${extra}</div>`;
+      box.innerHTML = `<div class="v-copy-msg">${icon('circle-help')}<p>${esc(text)}</p><div class="btns">${extra}</div></div>`;
       const b = box.querySelector('[data-copy="retry"]');
       if (b) b.onclick = () => { if (V && cur() === f) show(V.index, 0); };
     };
+    const fail = (text) => { message(text || t('video_failed'), retryBtn() + dlBtn()); V.copy = null; return null; };
     const draw = (st) => {
-      const pct = st.total ? Math.min(1, st.copied / st.total) : 0;
-      if (!box.querySelector('.ring')) {
-        box.innerHTML = `<div class="ring"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="${RING}"/></svg>
+      const phase = st.state === 'converting' ? 'conv' : st.state === 'waiting' ? 'wait' : 'copy';
+      if (box.dataset.phase !== phase) {
+        box.dataset.phase = phase;
+        const step = st.convert ? `<div class="v-copy-step">${esc(t(phase === 'copy' ? 'video_step_1' : 'video_step_2'))}</div>` : '';
+        const label = t(phase === 'conv' ? 'video_converting' : phase === 'wait' ? 'video_waiting' : 'video_copying');
+        box.innerHTML = `${step}<div class="ring ${phase}"><svg viewBox="0 0 120 120"><circle class="ring-bg" cx="60" cy="60" r="54"/><circle class="ring-fg" cx="60" cy="60" r="54" stroke-dasharray="${RING}" stroke-dashoffset="${RING}"/></svg>
           <div class="ring-text"><b data-copy-size></b></div></div>
-          <div class="v-copy-meta"><span>${esc(t('video_copying'))}</span>${f.duration ? `<span>${icon('clock')} ${hhmm(f.duration)}</span>` : ''}</div>
+          <div class="v-copy-meta"><span>${esc(label)}</span>${f.duration ? `<span>${icon('clock')} ${hhmm(f.duration)}</span>` : ''}</div>
           <button class="btn small ghost" type="button" data-copy="cancel">${icon('x')} ${esc(t('cancel'))}</button>`;
         box.querySelector('[data-copy="cancel"]').onclick = async () => {
           job.cancelled = true; V.copy = null;
-          try { await PG.api('DELETE', `/api/media/${f.id}/video`); } catch (e) { /* the copy stops anyway */ }
+          try { await PG.api('DELETE', vurl(f.id)); } catch (e) { /* the work stops anyway */ }
           if (V && V.slide === slide) message(t('video_cancelled'), retryBtn());
         };
       }
-      box.querySelector('.ring-fg').style.strokeDashoffset = String(RING * (1 - pct));
-      box.querySelector('[data-copy-size]').textContent = copySize(st.copied, st.total);
+      let pct = 0, text = '…';
+      if (phase === 'copy') { pct = st.total ? st.copied / st.total : 0; text = copySize(st.copied, st.total); }
+      if (phase === 'conv') {
+        pct = st.length ? st.done / st.length : 0;
+        text = st.length ? `${PG.digits(Math.round(Math.min(1, pct) * 100))}%<br><small>${mmss(st.done)} / ${mmss(st.length)}</small>` : mmss(st.done || 0);
+      }
+      box.querySelector('.ring-fg').style.strokeDashoffset = String(RING * (1 - Math.min(1, pct)));
+      box.querySelector('[data-copy-size]').innerHTML = text;
     };
     try {
-      let st = await PG.api('POST', `/api/media/${f.id}/video`);
+      let st = await PG.api('POST', vurl(f.id), { convert: f.forceConv ? 1 : 0 });
       let idle = 0;
       for (;;) {
         if (stop()) { box.remove(); return null; }
-        if (st.state === 'ready') { box.remove(); V.copy = null; return st.url; }
-        if (st.state === 'error') { message(st.message || t('video_failed'), retryBtn()); V.copy = null; return null; }
+        if (st.state === 'ready') { box.remove(); V.copy = null; return st; }
+        if (st.state === 'error') return fail(st.message);
         // "none" for a long time: the background process did not start
         idle = st.state === 'none' ? idle + 1 : 0;
-        if (idle > 12) { message(t('video_failed'), retryBtn()); V.copy = null; return null; }
+        if (idle > 12) return fail();
         draw(st);
-        await sleep(700);
+        await sleep(st.state === 'copying' ? 700 : 1000);
         if (stop()) { box.remove(); return null; }
-        st = await PG.api('GET', `/api/media/${f.id}/video`);
+        st = await PG.api('GET', vurl(f.id));
       }
     } catch (e) {
       if (stop()) { box.remove(); return null; }
       if (PG.storage.isDown(e)) { box.remove(); storageCheck(f, slide, () => {}); return null; }
-      message(e.message || t('video_failed'), retryBtn());
-      V.copy = null;
-      return null;
+      return fail(e.message);
     }
   }
 
-  function playVideo(f, slide, frame, url) {
+  function playVideo(f, slide, frame, st) {
     const video = document.createElement('video');
     video.className = 'video-js vjs-big-play-centered';
     video.setAttribute('controls', '');
@@ -271,17 +297,29 @@
     video.setAttribute('preload', 'metadata');
     if (f.thumb) video.setAttribute('poster', f.thumb);
     const src = document.createElement('source');
-    src.src = url; src.type = MIME[f.ext] || 'video/mp4';
+    src.src = st.url; src.type = st.mime || MIME[f.ext] || 'video/mp4';
     video.appendChild(src);
     frame.appendChild(video);
     frame.dataset.video = '1';
     layout(frame);
+    // "Still watching": keeps the files on the server while this video is shown (also when paused).
+    V.watch = { id: f.id, timer: setInterval(() => PG.api('GET', vurl(f.id)).catch(() => {}), 30000) };
     V.player = window.videojs(video, { language: PG.cfg.locale, controlBar: { pictureInPictureToggle: true }, playbackRates: [0.5, 1, 1.5, 2] });
     V.player.on('ended', () => { if (V && V.play) next(); });
-    // The local copy may have been cleaned up meanwhile (long pause): copy it again, but only once.
-    V.player.on('error', () => storageCheck(f, slide, () => { if (V && cur() === f && !f.recopied) { f.recopied = true; show(V.index, 0); } }));
+    // The browser cannot play this format (e.g. HEVC in some browsers): ask the server to convert it (once).
+    const convert = () => { if (V && cur() === f && !st.converted && !f.forceConv) { f.forceConv = true; show(V.index, 0); return true; } return false; };
+    V.player.on('error', () => storageCheck(f, slide, async () => {
+      if (!V || cur() !== f) return;
+      let now = null;
+      try { now = await PG.api('GET', vurl(f.id)); } catch (e) { /* */ }
+      if (!V || cur() !== f) return;
+      // The copy is still there, so the format is the problem; otherwise it was cleaned up meanwhile: copy it again, once.
+      if (now && now.state === 'ready' && convert()) return;
+      if (!f.recopied) { f.recopied = true; show(V.index, 0); }
+    }));
     V.player.on('loadedmetadata', () => {
       const vw = V && V.player && V.player.videoWidth();
+      if (!vw && f.w && convert()) return; // sound only: the browser cannot decode the picture
       if (vw && !f.w) { frame.dataset.w = vw; frame.dataset.h = V.player.videoHeight(); layout(frame); }
     });
     layout(frame);

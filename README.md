@@ -44,11 +44,28 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   played from the local copy. While copying, the viewer shows a progress ring with the size (`140/290 MB`, `0.3/1.2 GB`),
   the video length (HH:MM) and a **Cancel** button. Leaving the video (next/previous/close) also cancels the copy.
   - The copy runs in a background process (`gallery:copy-video`), in 4 MB pieces, each piece through a read slot.
-  - **Free disk space is checked first**: the file size + a reserve (`GALLERY_VIDEO_RESERVE_MB`, default 3072) must fit.
-    Old unused copies are removed first if that helps; if there is still not enough space, nothing is copied and the
-    user sees an error. At most `GALLERY_VIDEO_COPY_MAX` (2) copies run at the same time.
-  - A copy that nobody used for `GALLERY_VIDEO_CACHE_MINUTES` (15) minutes is deleted (`gallery:video-clean`, every 5 min).
-    Playing keeps the copy alive. If the copy is gone while the video is paused, it is copied again once.
+  - **Formats that browsers cannot play are converted** after the copy (never directly from the storage box, which is
+    too slow for that): `mkv`, `avi`, `mts`/`m2ts`, `wmv`, `flv`, `mpg`, `3gp`, `ogv`/`ogg`, `vob`, `divx`, `rm` and
+    others, and also `mp4`/`mov` files with an old codec (MPEG-4 part 2, MJPEG ...). The result is an MP4
+    (H.264 + AAC). The viewer shows two steps: *Step 1 of 2* copy (size), *Step 2 of 2* convert (percent and
+    `0:12 / 1:30`), both with **Cancel**. When another video is being converted, it shows *Waiting*.
+    - H.264 video in another container (most camcorder `.mts` and `.mkv` files) is only **re-packed** (seconds).
+      Other codecs are **encoded** with libx264 (`veryfast`, max 1280 px, lowest CPU priority, one at a time) — this
+      can take about as long as the video itself, or longer.
+    - The copy is **deleted as soon as the converted file is ready**.
+    - `mp4`/`mov` with HEVC (iPhone) are played as they are. If the browser cannot play a file (error, or sound
+      without picture), the viewer asks the server to convert it, and this is remembered for that file.
+    - If ffmpeg is missing or `GALLERY_VIDEO_CONVERT=false`, these formats show "no preview" with a download button.
+  - **Free disk space is checked first**: the file size + the expected size of the converted file + a reserve
+    (`GALLERY_VIDEO_RESERVE_MB`, default 3072) must fit, else nothing is copied. It is **checked again before the
+    conversion** (with the real numbers), and during the conversion (it stops if the disk gets too full). Unused copies
+    are removed first if that helps; if there is still not enough space, the user sees an error and nothing is done.
+    At most `GALLERY_VIDEO_COPY_MAX` (2) copies run at the same time.
+  - **Files are deleted soon**: while the viewer shows a video (also when paused) it says "still watching" every 30 s.
+    When the last viewer leaves the video (next/previous/close, or the page is closed), its files are deleted
+    **10 seconds** later (`gallery:video-drop`, `GALLERY_VIDEO_DROP_SECONDS`), unless somebody opens it again. Copies of
+    browser tabs that closed without a message are deleted after `GALLERY_VIDEO_CACHE_MINUTES` (2) by
+    `gallery:video-clean` (every minute). If the copy is gone while the video is paused, it is copied again once.
 - **Delete** (all users): a trash button in the viewer, and the **Select** mode (mark items, then *Delete selected*).
   There is no delete icon on the thumbnails. A simple confirmation is asked, then the item disappears at once (no reload). For the user it is a permanent delete.
   In fact the file is only **hidden for everybody** (`media.hidden_at`, `hidden_by`); nothing is changed on the storage
@@ -149,7 +166,7 @@ Backend: only Laravel itself (no extra Composer packages). Images use PHP GD + E
 ## Requirements
 
 PHP 8.3+ with `gd` (WebP), `exif`, `intl`, `mbstring`, `pdo_mysql`, `fileinfo`, `curl`; MySQL 8;
-`ffmpeg` (optional, for video thumbnails); a cron entry for the scheduler.
+`ffmpeg` with `libx264` (optional: video thumbnails and converting old video formats); a cron entry for the scheduler.
 
 ## Local setup
 
@@ -176,8 +193,9 @@ Useful commands:
 | `gallery:work` | run the active scan job for ~55 s (the scheduler starts it every minute) |
 | `gallery:geocode` | find city/country names for photos with GPS (1 request per second) |
 | `gallery:crawl [--budget=20]` | background scan: walk folders, read new files, for a few seconds (scheduler: every 3 min) |
-| `gallery:copy-video <id>` | copy one video to the local temporary folder (started by the web app) |
-| `gallery:video-clean [--minutes=]` | delete local video copies that were not used for a while (scheduler: every 5 min) |
+| `gallery:copy-video <id>` | copy one video to the local temporary folder, and convert it if needed (started by the web app) |
+| `gallery:video-drop <id> [--delay=]` | delete one video's local files a few seconds after the last viewer left (started by the web app) |
+| `gallery:video-clean [--minutes=]` | delete local video copies that no viewer shows (scheduler: every minute) |
 | `gallery:otd-telegram [--force]` | send today's "On this day" memories to Telegram (scheduler: daily 19:00 IRST) |
 
 Tests: `php artisan test`.

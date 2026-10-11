@@ -28,6 +28,8 @@ Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md fi
 - Never write to `GALLERY_ROOT`. Never read file content outside `Scanner`/`MediaFileController::original`
   (more exceptions: `TelegramDigest` uploads the files it sends; `VideoCache` copies a video to the local temp folder.
   Both read through `ReadSlots`). Videos are never streamed from the storage box: play the local copy (`/m/v/...`).
+  ffmpeg never reads a video on the storage box for conversion: copy first, convert the local copy, delete the copy.
+  Check free disk space before every copy and every conversion.
 - Every new endpoint that takes a path or a media id must go through `Access` (`resolve`, `canAccessMedia`, `scope`).
 - Virtual paths: admin = real path; user = `<folder_access_id>/<sub path>`.
 - Dates: `file_mtime` etc. are sent as UTC ISO with `Z`; `taken_at` is camera wall-clock time without `Z`.

@@ -103,3 +103,10 @@ The map uses OpenStreetMap tiles. Their servers block requests without a `Refere
 
 - **Video copies**: `GALLERY_PHP_BIN` (default `php8.4` here) is the command used to start the copy process. Copies go to
   `storage/app/vcache` (on the same disk as the app: keep several GB free; see `GALLERY_VIDEO_RESERVE_MB`).
+- **Video conversion** (formats browsers cannot play): the Ubuntu `ffmpeg` package has `libx264` and `aac`, nothing
+  else is needed. ger1 has only 2 CPU cores for ~50 sites, so the defaults are careful: one conversion at a time
+  (`GALLERY_VIDEO_CONVERT_MAX=1`), 2 threads (`GALLERY_VIDEO_CONVERT_THREADS`), `nice -n 19`, at most 1280 px on
+  the longer side (`GALLERY_VIDEO_CONVERT_MAX_SIDE`). H.264 files (most `.mts`/`.mkv`) are only re-packed, which is
+  fast. `GALLERY_VIDEO_CONVERT=false` turns conversion off (those videos then show "no preview" + download again).
+  Files are deleted `GALLERY_VIDEO_DROP_SECONDS` (10) after the last viewer leaves; copies of closed browser tabs after
+  `GALLERY_VIDEO_CACHE_MINUTES` (2) by the scheduler (every minute).

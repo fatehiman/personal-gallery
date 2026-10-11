@@ -55,7 +55,9 @@ Route::middleware(['auth', 'auth.session', TrackActivity::class])->group(functio
         Route::get('/media/{media}', [MediaInfoController::class, 'show'])->whereNumber('media');
         Route::get('/media/{media}/video', [MediaInfoController::class, 'videoStatus'])->whereNumber('media');
         Route::post('/media/{media}/video', [MediaInfoController::class, 'videoStart'])->whereNumber('media');
-        Route::delete('/media/{media}/video', [MediaInfoController::class, 'videoCancel'])->whereNumber('media');
+        Route::delete('/media/{media}/video', [MediaInfoController::class, 'videoLeave'])->whereNumber('media');
+        // The same for navigator.sendBeacon() when the page is closed (a beacon can only POST).
+        Route::post('/media/{media}/video/leave', [MediaInfoController::class, 'videoLeave'])->whereNumber('media');
         Route::post('/media/{media}/cover', [MediaInfoController::class, 'cover'])->whereNumber('media');
         Route::post('/media/{media}/description', [MediaInfoController::class, 'description'])->whereNumber('media');
         Route::post('/media/{media}/rotate', [MediaInfoController::class, 'rotate'])->whereNumber('media');

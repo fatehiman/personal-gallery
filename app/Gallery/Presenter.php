@@ -80,7 +80,7 @@ class Presenter
             'city' => $fa ? (($a['city_fa'] ?? null) ?: ($a['city_en'] ?? null)) : (($a['city_en'] ?? null) ?: ($a['city_fa'] ?? null)),
             'country' => $fa ? (($a['country_fa'] ?? null) ?: ($a['country_en'] ?? null)) : (($a['country_en'] ?? null) ?: ($a['country_fa'] ?? null)),
             'gps' => ($a['gps_lat'] ?? null) !== null ? [(float) $a['gps_lat'], (float) $a['gps_lng']] : null,
-            'playable' => $a['type'] === 'video' && isset($playable[$ext]),
+            'playable' => $a['type'] === 'video' && (isset($playable[$ext]) || VideoCache::canConvert()),
         ];
         if ($m->relationLoaded('tags')) {
             $out['tags'] = array_map(fn ($t) => $t->getAttributes()['name'], $m->getRelation('tags')->all());

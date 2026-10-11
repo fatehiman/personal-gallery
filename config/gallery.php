@@ -26,12 +26,22 @@ return [
 
     // Videos are copied to this (local, temporary) folder before playing; the storage box is too slow to stream from.
     'video_cache_dir' => storage_path('app/vcache'),
-    // Keep at least this much free disk space (MB) after the copy. Not enough space: the video is not copied.
+    // Keep at least this much free disk space (MB) after the copy and the conversion. Not enough space: nothing is
+    // copied or converted.
     'video_reserve_mb' => (int) env('GALLERY_VIDEO_RESERVE_MB', 3072),
-    // A copy that nobody used for this many minutes is deleted.
-    'video_cache_minutes' => (int) env('GALLERY_VIDEO_CACHE_MINUTES', 15),
+    // A copy that no open viewer shows and that nobody used for this many minutes is deleted (closed browser tabs).
+    'video_cache_minutes' => (int) env('GALLERY_VIDEO_CACHE_MINUTES', 2),
+    // When the last viewer leaves a video, its files are deleted after this many seconds.
+    'video_drop_seconds' => (int) env('GALLERY_VIDEO_DROP_SECONDS', 10),
     // How many videos may be copied at the same time.
     'video_copy_max' => (int) env('GALLERY_VIDEO_COPY_MAX', 2),
+    // Convert formats that browsers cannot play to MP4 (H.264/AAC) after the copy. Needs ffmpeg with libx264.
+    'video_convert' => (bool) env('GALLERY_VIDEO_CONVERT', true),
+    // How many conversions may run at the same time (they use a lot of CPU), and ffmpeg threads for each.
+    'video_convert_max' => (int) env('GALLERY_VIDEO_CONVERT_MAX', 1),
+    'video_convert_threads' => (int) env('GALLERY_VIDEO_CONVERT_THREADS', 2),
+    // Encoded videos get at most this many pixels on the longer side (1280 = 720p; smaller is faster).
+    'video_convert_max_side' => (int) env('GALLERY_VIDEO_CONVERT_MAX_SIDE', 1280),
     // Start the copy as a background process (false in tests).
     'video_spawn' => (bool) env('GALLERY_VIDEO_SPAWN', true),
     // PHP command line binary for the copy process (the web server runs php-fpm, so PHP_BINARY is not usable).
@@ -47,7 +57,11 @@ return [
     'image_ext' => ['jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp', 'bmp', 'avif', 'heic', 'heif', 'tif', 'tiff'],
     // Images that GD can decode (others get no thumbnail).
     'thumbable_ext' => ['jpg', 'jpeg', 'jpe', 'png', 'gif', 'webp', 'bmp', 'avif'],
-    'video_ext' => ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', '3gp', 'mpg', 'mpeg', 'wmv', 'flv', 'mts', 'm2ts', 'ogv'],
-    // Videos that browsers can usually play directly.
-    'playable_ext' => ['mp4', 'm4v', 'webm', 'mov', 'ogv'],
+    'video_ext' => ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', '3gp', '3g2', 'mpg', 'mpeg', 'wmv', 'flv', 'mts', 'm2ts', 'ogv', 'ogg',
+        'vob', 'mod', 'tod', 'divx', 'asf', 'f4v', 'rm', 'rmvb', 'dv'],
+    // Containers that browsers can play directly (other videos are converted to MP4 after the copy).
+    'playable_ext' => ['mp4', 'm4v', 'webm', 'mov'],
+    // Video codecs that browsers can play (other codecs are converted). HEVC plays in most browsers today;
+    // when it does not, the viewer asks for a conversion.
+    'browser_codecs' => ['h264', 'hevc', 'vp8', 'vp9', 'av1'],
 ];
