@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Gallery\Activity;
 use App\Gallery\Paths;
 use App\Gallery\ReadSlots;
 use App\Gallery\Scanner;
@@ -53,6 +54,7 @@ class MediaFileController extends Controller
             if (! $m->isThumbable()) {
                 return $this->fail(404);
             }
+            Activity::touch(); // this request reads the storage box: the crawler waits
             $slots = new ReadSlots;
             if (! $slots->acquire(15)) {
                 return $this->fail(503, 3);
@@ -113,6 +115,7 @@ class MediaFileController extends Controller
         } catch (StorageUnavailableException) {
             return $this->fail(503, 30);
         }
+        Activity::touch(); // the original is read from the storage box: the crawler waits
         $abs = Paths::abs($m->path);
         if (! is_file($abs) || is_link($abs)) {
             return $this->fail(404);

@@ -92,7 +92,11 @@
     renderPanel(f);
 
     // Details first when we do not have URLs yet (e.g. opened from the map).
-    if (!f.url) await loadInfo(f);
+    if (!f.url) {
+      await loadInfo(f);
+      if (!V || cur() !== f) return;
+      header(f); renderPanel(f); // the panel was drawn before the details came: draw it again
+    }
     if (!V || cur() !== f) return;
     if (f.type === 'image' && IMG_SHOW.includes(f.ext)) showImage(f, slide);
     else if (f.type === 'video') showVideo(f, slide);

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Gallery\Activity;
 use App\Gallery\Crawler;
 use App\Gallery\OtdFolders;
 use App\Gallery\Settings;
@@ -326,6 +327,44 @@ class FeaturesTest extends TestCase
 
         $admin = $this->user(true);
         $this->actingAs($admin)->get('/admin/scans')->assertOk()->assertSee('round finished');
+    }
+
+    public function test_crawler_waits_while_a_user_is_browsing_and_continues_after_5_minutes(): void
+    {
+        $admin = $this->user(true);
+        $this->actingAs($admin)->getJson('/api/list?path=A')->assertOk(); // browsing = activity
+        $this->assertTrue(Activity::recent());
+        Directory::query()->delete();
+        app(Crawler::class)->run(10);
+        $this->assertSame(0, Media::whereNotNull('scanned_at')->count());
+        $this->assertStringContainsString('user is browsing', (string) \DB::table('crawl_logs')->value('note'));
+
+        // The polls of the storage retry button and of the scan status are not activity.
+        Settings::set(Activity::KEY, time() - 6 * 60);
+        $this->actingAs($admin)->getJson('/api/health')->assertOk();
+        $this->actingAs($admin)->getJson('/api/admin/scan')->assertOk();
+        $this->assertFalse(Activity::recent());
+        app(Crawler::class)->run(15);
+        $this->assertSame(4, Media::whereNotNull('scanned_at')->count());
+    }
+
+    public function test_search_is_limited_to_the_folder_and_returns_its_breadcrumbs(): void
+    {
+        $admin = $this->user(true);
+        app(Crawler::class)->run(15);
+        $all = $this->actingAs($admin)->getJson('/api/search?q=jpg')->assertOk();
+        $this->assertCount(4, $all->json('files'));
+        $r = $this->actingAs($admin)->getJson('/api/search?q=jpg&in=A/B')->assertOk();
+        $this->assertEqualsCanonicalizing(['deep.jpg', 'mid.jpg'], array_column($r->json('files'), 'name'));
+        $this->assertSame('A/B', $r->json('inPath'));
+        $this->assertSame(['A', 'B'], array_column($r->json('crumbs'), 'name'));
+
+        $u = $this->user();
+        $fa = FolderAccess::create(['user_id' => $u->id, 'title' => 'Mine', 'path' => 'A']);
+        $this->flushSession();
+        $r = $this->actingAs($u)->getJson('/api/search?q=jpg&in='.$fa->id)->assertOk();
+        $this->assertCount(3, $r->json('files')); // never E
+        $this->assertSame(['Mine'], array_column($r->json('crumbs'), 'name'));
     }
 
     private function videoSetup(): Media

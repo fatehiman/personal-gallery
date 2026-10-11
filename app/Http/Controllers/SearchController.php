@@ -73,8 +73,10 @@ class SearchController extends Controller
         $dirs = Directory::query();
         $access->scope($dirs, 'path');
 
-        if (! empty($data['in'])) {
-            $r = $access->resolve($data['in']);
+        // A search is always inside one folder and its sub folders (the folder the user was in).
+        $inPath = Paths::normalize($data['in'] ?? '');
+        if ($inPath !== '') {
+            $r = $access->resolve($inPath);
             if (! $r['virtualRoot'] && $r['real'] !== '') {
                 $like = Paths::like($r['real']).'/%';
                 $q->where('media.path', 'like', $like);
@@ -141,10 +143,12 @@ class SearchController extends Controller
             $filtered = true;
         }
         if (! $terms && ! $filtered) {
-            return response()->json(['files' => [], 'folders' => [], 'more' => false, 'page' => 0]);
+            return response()->json(['files' => [], 'folders' => [], 'more' => false, 'page' => 0, 'inPath' => $inPath, 'crumbs' => $access->crumbs($inPath)]);
         }
         $out = $this->files($this->sort($q, $data['sort'] ?? null), $access, $request);
         $out['folders'] = [];
+        $out['inPath'] = $inPath; // the browser shows this folder in the breadcrumbs
+        $out['crumbs'] = $access->crumbs($inPath);
         if ($terms && ! $filtered && (int) $request->query('page', 0) === 0) {
             $out['folders'] = Directory::withoutEmpty($dirs->orderBy('name')->limit(100)->get())
                 ->map(function ($d) use ($access) {

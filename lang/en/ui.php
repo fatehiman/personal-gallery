@@ -102,7 +102,6 @@ return [
 
     // search
     'search_placeholder' => 'Search names, folders, tags, people, descriptions…',
-    'search_here' => 'Only in this folder',
     'date_from' => 'From',
     'date_to' => 'To',
     'filters' => 'Filters',

@@ -122,14 +122,18 @@
     document.querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === state.view));
     const vi = root.querySelector('.view-ic use');
     if (vi) vi.setAttribute('href', PG.cfg.icons + '#i-' + VIEW_ICONS[state.view]);
-    const here = panel.querySelector('[data-here-wrap]');
-    here.hidden = !(browse && state.path !== '') && !(state.search && state.search.in);
     let html = `<a href="${browseUrl('')}" data-nav="">${icon('house')}</a>`;
     if (browse) {
       (state.data && state.data.path === state.path ? state.data.crumbs : []).forEach((c) => {
         html += `<span class="sep">${icon('chevron-right')}</span><a href="${browseUrl(c.path)}" data-nav="${esc(c.path)}">${esc(c.name)}</a>`;
       });
     } else {
+      // A search is always inside one folder: show that folder (links open it), then "Results".
+      if (state.mode === 'search' && state.data && state.data.inPath === (state.search.in || '')) {
+        (state.data.crumbs || []).forEach((c) => {
+          html += `<span class="sep">${icon('chevron-right')}</span><a href="${browseUrl(c.path)}" data-nav="${esc(c.path)}">${esc(c.name)}</a>`;
+        });
+      }
       const label = { favorites: t('favorites'), onthisday: t('on_this_day'), search: t('results') }[state.mode];
       html += `<span class="sep">${icon('chevron-right')}</span><a href="${location.pathname + location.search}">${esc(label)}</a>`;
     }
@@ -613,7 +617,6 @@
     form.q.value = s.q || '';
     ['tag', 'person', 'camera', 'place', 'type'].forEach((k) => (form[k].value = s[k] || ''));
     ['fav', 'gps', 'described'].forEach((k) => (form[k].checked = !!s[k]));
-    form.here.checked = !!s.in;
     form.from._dp.set(s.from || '');
     form.to._dp.set(s.to || '');
     if (s.tag || s.person || s.camera || s.place || s.type || s.fav || s.gps || s.described) form.querySelector('.sp-more').hidden = false;
@@ -631,8 +634,9 @@
     ['fav', 'gps', 'described'].forEach((k) => { if (form[k].checked) p[k] = 1; });
     if (form.from.dataset.iso) p.from = form.from.dataset.iso;
     if (form.to.dataset.iso) p.to = form.to.dataset.iso;
-    if (form.here.checked) p.in = state.mode === 'browse' ? state.path : (state.search && state.search.in) || '';
-    if (!p.in) delete p.in;
+    // Always search in the folder we are in (and below it). From a search page: the folder of that search.
+    const where = state.mode === 'browse' ? state.path : state.mode === 'search' ? (state.search && state.search.in) || '' : '';
+    if (where && where !== DELETED && !where.startsWith(DELETED + '/')) p.in = where; // no search in "Deleted items"
     go('/search?' + new URLSearchParams(p));
   });
   form.addEventListener('reset', () => setTimeout(() => { form.from._dp.set(''); form.to._dp.set(''); }, 0));

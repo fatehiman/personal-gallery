@@ -102,7 +102,6 @@ return [
 
     // search
     'search_placeholder' => 'جستجو در نام‌ها، پوشه‌ها، برچسب‌ها، افراد، توضیحات…',
-    'search_here' => 'فقط در همین پوشه',
     'date_from' => 'از تاریخ',
     'date_to' => 'تا تاریخ',
     'filters' => 'فیلترها',

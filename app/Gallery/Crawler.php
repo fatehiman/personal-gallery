@@ -16,6 +16,8 @@ use Throwable;
  * was never listed) it reads the listing again, and it reads (scans) the files that were never read.
  * A file with the same path and size is never read again, whatever its date says (see Indexer).
  * At the end of the tree it starts again from the beginning. So after the first rounds it only finds new files.
+ * Users have priority: while a user was active in the last 5 minutes (see Activity) it does nothing, and it stops
+ * at once when a user starts browsing during a run. The 3-minute rhythm continues 5 minutes after the last activity.
  * Every run writes one line to crawl_logs (kept 10 days).
  */
 class Crawler
@@ -75,6 +77,9 @@ class Crawler
         if (ScanJob::active()) {
             return 'paused: admin scan is running'; // it does the same work, do not read twice
         }
+        if (Activity::recent()) {
+            return 'paused: a user is browsing'; // users have priority on the slow storage
+        }
         if (! Health::ok(true)) {
             return 'storage not available';
         }
@@ -84,6 +89,9 @@ class Crawler
 
         try {
             while (time() < $end) {
+                if (Activity::recent()) {
+                    return 'stopped: a user started browsing';
+                }
                 $dir = $this->open($pos);
                 if (! $dir) {
                     if ($pos === '') {
@@ -97,6 +105,9 @@ class Crawler
                 $this->stats['folders']++;
                 $pending = Media::where('directory_id', $dir->id)->whereNull('scanned_at')->whereIn('type', ['image', 'video']);
                 while (time() < $end && ($m = (clone $pending)->orderBy('filename')->first())) {
+                    if (Activity::recent()) {
+                        return 'stopped: a user started browsing';
+                    }
                     if (! $slots->acquire(20)) {
                         return 'read slots busy';
                     }

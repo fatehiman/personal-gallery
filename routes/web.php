@@ -10,6 +10,7 @@ use App\Http\Controllers\HideController;
 use App\Http\Controllers\MediaInfoController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SearchController;
+use App\Http\Middleware\TrackActivity;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -19,7 +20,7 @@ Route::middleware('guest')->group(function () {
 Route::get('/lang/{locale}', [AuthController::class, 'guestLocale'])->whereIn('locale', ['en', 'fa'])->name('guest.locale');
 
 // auth.session: changing a password ends the user's other sessions (other browsers / devices).
-Route::middleware(['auth', 'auth.session'])->group(function () {
+Route::middleware(['auth', 'auth.session', TrackActivity::class])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/', fn () => redirect()->route('browse'));
 

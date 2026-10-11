@@ -26,7 +26,9 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   list (paged, sorted by the server). It uses only what the gallery already knows (database), so it never reads the
   storage box; a small note says how many folders are not read yet.
 - **Search** in folder names, file names, tags, people, descriptions, city and country. Filters: date range (with a
-  Gregorian/Jalali date picker), type, tag, person, camera, place, favorites, has location, has description, only this folder.
+  Gregorian/Jalali date picker), type, tag, person, camera, place, favorites, has location, has description.
+  A search always runs **in the folder you are in and all folders below it** (at the root: everything the user may see).
+  The breadcrumbs show that folder, then *Results*; its links open the folders.
 - **Fullscreen viewer**: fade transitions, swipe, keyboard, zoom (wheel, pinch, double-tap), slideshow (3/5/10 s),
   rotate (stored in the DB only), favorites, download, info panel with all EXIF data. A blurred thumbnail shows
   while the original loads (not at all when the original is already cached). The description is shown on the photo
@@ -96,6 +98,12 @@ It goes through all folders in a fixed order (depth first, by name) and remember
 - Every run writes **one line** to the log (`crawl_logs`), shown on *Scan jobs* (last 300 runs; lines older than 10 days
   are deleted): time, seconds, from/to folder, folders checked, new files, files read, errors, result.
 - It pauses while an admin scan job runs. It uses the same read slots (max 2 reads at once) as everything else.
+- **Users have priority.** Every user request that can use the storage box (pages, API calls, and thumbnails or
+  originals that are read from the storage) saves the time in `settings.last_user_browsing` (written at most every
+  10 s; `App\Gallery\Activity`). The automatic polls (`/api/health`, admin scan status) do not count. While the last
+  activity is **less than 5 minutes** old, the crawler does nothing (log note `paused: a user is browsing`), and a
+  run that is already working stops at the next folder or file (`stopped: a user started browsing`). The 3-minute
+  rhythm continues by itself 5 minutes after the last user activity.
 
 ## Time zones
 

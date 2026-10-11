@@ -58,7 +58,6 @@
             <button class="btn primary" type="submit">{{ __('ui.apply') }}</button>
         </div>
         <div class="sp-row">
-            <label class="check" data-here-wrap><input type="checkbox" name="here" value="1"> <span>{{ __('ui.search_here') }}</span></label>
             <label class="field inline"><span>{{ __('ui.date_from') }}</span><input type="text" name="from" data-datepicker readonly placeholder="—"></label>
             <label class="field inline"><span>{{ __('ui.date_to') }}</span><input type="text" name="to" data-datepicker readonly placeholder="—"></label>
             <button type="button" class="btn ghost small" data-act="more-filters">@include('partials.icon', ['i' => 'funnel']) {{ __('ui.filters') }}</button>
