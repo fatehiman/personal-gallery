@@ -1,9 +1,30 @@
 @extends('layouts.app')
 @section('title', __('ui.scan_jobs'))
 
+@push('scripts')
+    <script src="{{ \App\Support\Asset::url('assets/admin.js') }}" defer></script>
+@endpush
+
 @section('content')
 <div class="wide">
     <h1 class="page-title">@include('partials.icon', ['i' => 'scan-search']) {{ __('ui.scan_jobs') }}</h1>
+
+    {{-- The report is heavy (it counts the whole media table): it is never loaded with the page, only by the button. --}}
+    <section class="card stats-card" id="scan-stats">
+        <div class="stats-head">
+            <div>
+                <h2>@include('partials.icon', ['i' => 'chart-pie']) {{ __('ui.stats_title') }}</h2>
+                <p class="muted small">{{ __('ui.stats_hint') }}</p>
+            </div>
+            <button type="button" class="btn primary" data-stats-load>
+                @include('partials.icon', ['i' => 'refresh-cw']) <span data-stats-label>{{ __('ui.stats_generate') }}</span>
+            </button>
+        </div>
+        <div class="stats-body" data-stats-body aria-live="polite">
+            <p class="stats-empty muted">@include('partials.icon', ['i' => 'square-dashed']) {{ __('ui.stats_placeholder') }}</p>
+        </div>
+    </section>
+
     <div class="card table-card">
         @if ($jobs->isEmpty())
             <p class="muted">{{ __('ui.no_jobs') }}</p>

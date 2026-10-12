@@ -442,6 +442,35 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .table th, .table td { padding: 8px 10px; text-align: start; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
 .table th { color: var(--muted); }
 
+/* ---------- scan statistics (admin, loaded by a button) ---------- */
+.stats-card { padding: 16px; margin-bottom: 18px; }
+.stats-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.stats-head h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 1.1rem; }
+.stats-head h2 .ic { color: var(--primary); }
+.stats-head p { margin: 0; max-width: 70ch; }
+.stats-body { margin-top: 14px; }
+.stats-empty { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; padding: 26px 10px; border: 2px dashed var(--border); border-radius: var(--card-radius); text-align: center; }
+.stats-empty.err { color: var(--danger); border-color: var(--danger-soft); }
+.stats-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.stat-tile { background: var(--c, var(--surface2)); border-radius: var(--card-radius); padding: 10px 14px; }
+.stat-tile b { display: block; font-size: 1.35rem; line-height: 1.25; color: var(--heading); }
+.stat-tile span { font-size: .85em; }
+.stats-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.stat-chart { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border-soft); border-radius: var(--card-radius); }
+.stat-chart h3 { align-self: flex-start; margin: 0; font-size: .95rem; }
+.donut { width: 150px; height: 150px; }
+.donut .track, .donut .seg { fill: none; stroke-width: 6; }
+.donut .track { stroke: var(--surface2); }
+.donut .seg { stroke: var(--cd); }
+.donut text { fill: var(--heading); font-family: inherit; font-weight: 800; font-size: 5.6px; text-anchor: middle; }
+.donut text.sm { font-size: 4.1px; }
+.legend { display: grid; gap: 4px; width: 100%; margin: 0; padding: 0; list-style: none; font-size: .88em; }
+.legend li { display: flex; align-items: center; gap: 8px; }
+.legend i { flex: none; width: 11px; height: 11px; border-radius: 50%; background: var(--cd); }
+.legend .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend .v { color: var(--muted); white-space: nowrap; }
+.stats-foot { margin: 12px 0 0; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .navlink span { display: none; }

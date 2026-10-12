@@ -258,6 +258,46 @@ class FeaturesTest extends TestCase
         \Illuminate\Support\Facades\Http::assertSent(fn ($req) => str_ends_with($req->url(), '/sendDocument'));
     }
 
+    public function test_scan_page_does_not_load_the_report_and_only_the_admin_can_ask_for_it(): void
+    {
+        $admin = $this->user(true);
+        \DB::enableQueryLog();
+        $this->actingAs($admin)->get('/admin/scans')->assertOk()
+            ->assertSee('data-stats-load', false)->assertSee(__('ui.stats_placeholder'));
+        foreach (\DB::getQueryLog() as $q) {
+            $this->assertDoesNotMatchRegularExpression('/from\s+["`]?media["`]?(\s|$)/i', $q['query'], 'the page must not count files');
+        }
+
+        $this->flushSession();
+        $this->actingAs($this->user())->getJson('/api/admin/scan/stats')->assertForbidden();
+    }
+
+    public function test_scan_stats_count_only_what_is_in_the_database(): void
+    {
+        file_put_contents($this->root.'/E/notes.txt', 'x');
+        app(Crawler::class)->run(15); // 4 photos read, 6 folders listed
+        Media::where('path', 'A/top.jpg')->update(['hidden_at' => now()]);
+        Media::where('path', 'E/other.jpg')->update(['scan_error' => 'broken']);
+        Media::where('path', 'A/B/mid.jpg')->update(['gps_lat' => 1.5, 'gps_lng' => 2.5]);
+
+        $admin = $this->user(true);
+        $r = $this->actingAs($admin)->getJson('/api/admin/scan/stats')->assertOk();
+        $r->assertJsonPath('folders', ['total' => 6, 'listed' => 6])
+            ->assertJsonPath('files.total', 4)       // 3 visible photos + notes.txt; the hidden one is not counted
+            ->assertJsonPath('files.hidden', 1)
+            ->assertJsonPath('files.gps', 1)
+            ->assertJsonPath('types.0.count', 3)     // image
+            ->assertJsonPath('types.1.count', 0)     // video
+            ->assertJsonPath('types.2.count', 1)     // other
+            ->assertJsonPath('read', ['read' => 2, 'pending' => 0, 'errors' => 1]); // "other" files are never read
+        $this->assertSame(['jpg' => 3, 'txt' => 1], collect($r->json('exts'))->pluck('count', 'ext')->all());
+        $this->assertSame(
+            (int) Media::sum('size'),
+            (int) $r->json('files.size')
+        );
+        $this->assertNotEmpty($r->json('generated_at'));
+    }
+
     public function test_crawler_stops_when_time_is_over_and_continues_in_the_same_place(): void
     {
         app(Crawler::class)->run(0);

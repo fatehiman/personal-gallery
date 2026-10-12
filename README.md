@@ -16,6 +16,9 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   are refused with a clear message.
 - **Admin sees all folders** and can **scan a folder** (one scan job at a time, can be stopped from any scan button).
   Manual scans are for quick needs. The normal way is the **background scan** (below).
+- **Database statistics** (admin, page *Scan jobs*): a *Generate report* button counts what the gallery knows (folders,
+  files, photos/videos/other, sizes, most common extensions, read status, folders listed or not) and shows circle charts.
+  It reads only the database, and only when the button is pressed (the count is heavy, so it is never loaded with the page).
 - **Admin settings** (menu *Settings*): Telegram bot token, group/channel ID, minimum years, max images and max videos
   for the daily "On this day" message; background scan on/off and seconds per run.
 - **Six views**: Mosaic, Small tiles, Gallery (default), Large tiles, **Quick list** (names, size, date only — no file is

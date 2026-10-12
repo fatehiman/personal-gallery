@@ -131,3 +131,91 @@ Telegram result after 19:00 IRST.
 - Is 20 s still the right budget after the first round, or can it be lower?
 - Does the weekly re-listing cost too much (many `listed` per run every 7 days)? If yes, spread it (for example a
   random 6–8 days per folder).
+
+---
+
+# 4. Database and server review (2026-10-12)
+
+Measured on ger1 (read only) and on a **scratch copy** of the `media` table (a temporary database, dropped afterwards;
+production was not changed by the tests).
+
+## 4.1 Facts
+
+| Item | Value |
+|---|---|
+| Server ger1 | 2 CPU cores, 3.8 GB RAM (375 MB free, **1.6 GB swap in use**), load average ~2 (up to 4 while I tested). Shared with ~50 sites. |
+| MySQL | 8.0.46, `innodb_buffer_pool_size` 768 MB, 19 of 151 connections used at most. |
+| Gallery database | `media` 95 MB data + 28 MB indexes (59,850 rows, ~1.6 KB per row; `exif` JSON ~900 bytes of it). Everything else is tiny. |
+| Buffer pool hit rate | 99.99 % (25,573 disk reads for 180 million requests). |
+| Slow query log (> 3 s) | No gallery query. 4 entries from other sites (COMMIT / INSERT / UPDATE of 5–7 s at 05:42 UTC: a disk stall). |
+| Disk `/mnt/ger_hd1` | 40 GB, 16 GB free. Thumbnails: 1.2 GB for 58.6 k photos (~21 KB each), already in 256 folders. Inodes 23 % used. |
+| Storage box | 823 GB used of 1 TB, but **this is the whole storage box (the account may hold other things), not only gallery files**, so it says nothing sure about the gallery size. The database knows 112.6 GB (59.8 k files: 58.6 k photos 20.8 GB, 998 videos 86.4 GB, 216 other). The real total is unknown. |
+
+## 4.2 The problem that was found (and fixed in migration `2026_10_12_000004`)
+
+`EXPLAIN ANALYZE` showed that **every list, folderless and search query read all rows**: 260–420 ms each at 60 k rows.
+Cause: the global scope `hidden_at IS NULL` made MySQL choose `media_hidden_at_index` (only ~10 rows have a value),
+read every row through it (random reads) and sort them in memory. The time grows with the number of files.
+
+| Query (copy of production, 59.8 k rows) | Before | After |
+|---|---|---|
+| Folderless, whole gallery, newest first | 259 ms | **1.1 ms** |
+| User with 2 folders | 361 ms | **1.1 ms** |
+| Folderless, a sub folder with 7 k files | 423 ms | 70 ms |
+| Small sub folder (1.5 k files) | 328 ms | 12 ms |
+| Folder cover on the home page | 313 ms | 17 ms |
+| Deleted items count | 0.05 ms | 0.1 ms |
+
+Changes (MySQL only, `INPLACE` + `LOCK=NONE`: no write lock, a few seconds; the code works with or without them):
+
+- `sort_at` = `COALESCE(taken_at, file_mtime)` as a **VIRTUAL generated column** + index `media_visible_sort (hidden_at, sort_at)`.
+  MySQL uses it by itself for the existing `ORDER BY COALESCE(taken_at, file_mtime)`: no query was changed.
+- `media_path_prefix (path(191))` and `directories_path_prefix (path(191))` for `path LIKE 'folder/%'`.
+- `media_hidden_at_index` is dropped (replaced by the first index; `hidden_at IS NOT NULL` still works through it).
+
+Not fixed by any index: the search box (`LIKE '%word%'` on 6 columns) still reads the whole table (~0.3 s per 60 k rows).
+
+## 4.3 Is the server enough?
+
+- **Today (60 k files): yes.** The database is 125 MB and fits the buffer pool 6 times. No slow gallery query.
+- **The weak points are not MySQL's size**, but: (1) the shared 2-core host that already runs at load ~2 and swaps,
+  (2) queries that scan everything (fixed above), (3) disk for thumbnails, (4) the time the crawler needs.
+- **If the gallery grows to ~1 million media files** (this is only an upper-bound scenario: the 823 GB on the storage box is not all gallery files, so the real number is unknown. The statistics button will show the real count as the crawler goes on):
+  - `media` ≈ 1.6 GB data + 0.5 GB indexes: **does not fit** the 768 MB buffer pool, and the host has no free RAM.
+  - Thumbnails ≈ 21 GB: **more than the 16 GB free** on `/mnt/ger_hd1`.
+  - The first crawler round: 42.6 k files took 32 h (1.3 k/h) → 1 M files ≈ **32 days**.
+  - Whole-table queries (search, the statistics button): ≈ 0.3–0.8 s per 60 k rows → 5–13 s per 1 M rows.
+- Up to ~300 k files the current server is fine with the new indexes. Above that, plan the items below.
+
+## 4.4 Suggestions (not done yet, in the order I would do them)
+
+1. **Watch the numbers**: the statistics button (admin *Scan jobs*) shows total files, folders and "took N ms".
+   Press it now and then; when "took" passes ~2 s, or files pass ~300 k, do the next items.
+2. **Slim the `media` table**: move `exif` (JSON, ~55 % of every row) to a 1:1 table `media_exif`, read only by the
+   info panel. Rows 1.6 KB → ~0.7 KB: scans, the statistics and the buffer pool need about half. Medium work (Scanner,
+   MediaInfoController, a data-moving migration).
+3. **Search**: a narrow table `media_search (media_id, text)` with only the searched text (~150 bytes per row) scanned
+   instead of `media`: ~10× faster. I also tested an ngram FULLTEXT index: it was **112 MB for 112 MB of data** and
+   returned 0 rows for a word that LIKE finds 15 times, so it is not a drop-in replacement. Not recommended as is.
+4. **Disk for thumbnails**: watch `df /mnt/ger_hd1`. Options if it gets tight: lower `GALLERY_THUMB_QUALITY` (72) or
+   `GALLERY_THUMB_SIZE` (480), or move the app folder to a bigger disk. (The crawler makes a thumbnail for every
+   photo, not only for the ones users look at, so the disk use grows with the number of photos.)
+5. **Crawler speed for the first round**: raise "seconds of work" (max 50) at night only; or let a second worker use the
+   second read slot when nobody is browsing (about 2× faster; check that the storage box accepts it).
+6. **MySQL (server wide, affects the other sites too, so it is your decision)**:
+   - `long_query_time` 3 s → 0.5 s to see problems earlier.
+   - The 5–7 s COMMITs of other sites at 05:42 look like a disk stall (maybe the backup). Not verified.
+   - Buffer pool: raise only if RAM is added. `innodb_flush_log_at_trx_commit=2` would remove most fsync waits, at the
+     price of losing up to 1 s of commits after a power loss.
+7. **Bigger step if the gallery grows a lot**: its own small VPS (4 GB RAM, 2 cores) for the gallery + MySQL. The shared host
+   with 50 sites and swap is the real limit, not the schema.
+8. Small things: the crawler counts all `media` rows twice per run (`Media::count()`); `MAX(id)` is enough. Sessions and
+   cache are files (fine for one server).
+
+## 4.5 New admin feature
+
+*Scan jobs* page → box **Database statistics**: nothing is loaded with the page. The button *Generate report* calls
+`GET /api/admin/scan/stats` (admin only, database only) and shows 6 numbers and 5 circle charts (files by type, size by
+type, most common extensions, read status of photos/videos, folders listed or not). One query reads the table in order
+(no WHERE: 40 % faster than going through the `hidden_at` index). Code: `ScanController::stats`, `public/assets/admin.js`,
+styles in `base.css` (palette classes `c0..c5`, so both themes work).
