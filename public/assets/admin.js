@@ -49,6 +49,15 @@
     // "12.5%"; a small value is never shown as 0% ("<0.1%").
     const share = (v, total) => (!total || v <= 0 ? pf.format(0) : v / total < 0.001 ? '<' + pf.format(0.001) : pf.format(v / total));
 
+    // "2 days ago" (the saved report can be old).
+    const rtf = new Intl.RelativeTimeFormat(document.documentElement.lang === 'fa' ? 'fa' : 'en', { numeric: 'auto' });
+    const ago = (iso) => {
+      const s = Math.max(0, Math.round((Date.now() - PG.parseDate(iso)) / 1000));
+      if (s < 60) return rtf.format(-s, 'second');
+      if (s < 3600) return rtf.format(-Math.round(s / 60), 'minute');
+      return s < 86400 ? rtf.format(-Math.round(s / 3600), 'hour') : rtf.format(-Math.round(s / 86400), 'day');
+    };
+
     // A circle chart: one SVG circle per slice (stroke-dasharray on a circle of length 100, starts at 12 o'clock).
     function donut(title, slices, fmt) {
       const total = slices.reduce((a, s) => a + s.value, 0);
@@ -98,23 +107,39 @@
           { name: PG.t('stats_listed'), value: d.folders.listed },
           { name: PG.t('stats_not_listed'), value: d.folders.total - d.folders.listed },
         ], PG.num)
-        + `</div><p class="stats-foot muted small">${PG.esc(PG.t('stats_generated', { time: PG.fmtDate(d.generated_at), ms: PG.num(d.ms) }))}</p>`;
+        + `</div><p class="stats-foot muted small">${PG.esc(PG.t('stats_generated', { time: PG.fmtDate(d.generated_at), ago: ago(d.generated_at), ms: PG.num(d.ms) }))}</p>`;
     }
 
+    const placeholder = () => `<p class="stats-empty muted">${PG.icon('square-dashed')} ${PG.esc(PG.t('stats_placeholder'))}</p>`;
+    const failed = () => `<p class="stats-empty err">${PG.icon('circle-help')} ${PG.esc(PG.t('stats_failed'))}</p>`;
+
+    // The newest saved report is read when the page opens (one row, cheap).
+    async function loadSaved() {
+      try {
+        const r = await PG.api('GET', '/api/admin/scan/stats');
+        if (r.report) { render(r.report); label.textContent = PG.t('stats_refresh'); } else body.innerHTML = placeholder();
+      } catch (e) {
+        if (e.message !== 'session') body.innerHTML = failed();
+      }
+    }
+    if (box.dataset.hasReport === '1') loadSaved();
+
+    // The button makes a NEW report (heavy), which the server saves with its date and time.
     btn.addEventListener('click', async () => {
       const ic = btn.querySelector('svg');
+      const before = label.textContent;
       btn.disabled = true;
       ic.classList.add('spin');
       label.textContent = PG.t('stats_loading');
       try {
-        render(await PG.api('GET', '/api/admin/scan/stats'));
+        render((await PG.api('POST', '/api/admin/scan/stats')).report);
         label.textContent = PG.t('stats_refresh');
       } catch (e) {
         if (e.message !== 'session') {
-          body.innerHTML = `<p class="stats-empty err">${PG.icon('circle-help')} ${PG.esc(PG.t('stats_failed'))}</p>`;
+          if (!body.querySelector('.stats-tiles')) body.innerHTML = failed(); // an old report stays visible
           PG.error(e);
         }
-        label.textContent = PG.t('stats_generate');
+        label.textContent = before;
       } finally {
         btn.disabled = false;
         ic.classList.remove('spin');

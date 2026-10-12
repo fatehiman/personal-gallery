@@ -214,8 +214,11 @@ Not fixed by any index: the search box (`LIKE '%word%'` on 6 columns) still read
 
 ## 4.5 New admin feature
 
-*Scan jobs* page → box **Database statistics**: nothing is loaded with the page. The button *Generate report* calls
-`GET /api/admin/scan/stats` (admin only, database only) and shows 6 numbers and 5 circle charts (files by type, size by
-type, most common extensions, read status of photos/videos, folders listed or not). One query reads the table in order
-(no WHERE: 40 % faster than going through the `hidden_at` index). Code: `ScanController::stats`, `public/assets/admin.js`,
-styles in `base.css` (palette classes `c0..c5`, so both themes work).
+*Scan jobs* page → box **Database statistics**. Opening the page only reads the **newest saved report** (one row of
+`scan_reports`: `GET /api/admin/scan/stats`) and shows it with its date, time and age ("2 days ago"). Nothing is counted.
+The button *Refresh report* (`POST /api/admin/scan/stats`, admin only, database only) makes a **new** report, saves it
+(the last 100 are kept, so a growth trend is possible later) and shows it. If making it fails, the old report stays visible.
+The report has 6 numbers and 5 circle charts (files by type, size by type, most common extensions, read status of
+photos/videos, folders listed or not). One query reads the table in order (no WHERE: 40 % faster than going through the
+`hidden_at` index). Code: `ScanController::stats` / `generateStats`, migration `2026_10_12_000005_scan_reports`,
+`public/assets/admin.js`, styles in `base.css` (palette classes `c0..c5`, so both themes work).

@@ -10,18 +10,23 @@
     <h1 class="page-title">@include('partials.icon', ['i' => 'scan-search']) {{ __('ui.scan_jobs') }}</h1>
 
     {{-- The report is heavy (it counts the whole media table): it is never loaded with the page, only by the button. --}}
-    <section class="card stats-card" id="scan-stats">
+    {{-- A saved report (if any) is read by Ajax when the page opens: one row, cheap. --}}
+    <section class="card stats-card" id="scan-stats" data-has-report="{{ $hasReport ? 1 : 0 }}">
         <div class="stats-head">
             <div>
                 <h2>@include('partials.icon', ['i' => 'chart-pie']) {{ __('ui.stats_title') }}</h2>
                 <p class="muted small">{{ __('ui.stats_hint') }}</p>
             </div>
             <button type="button" class="btn primary" data-stats-load>
-                @include('partials.icon', ['i' => 'refresh-cw']) <span data-stats-label>{{ __('ui.stats_generate') }}</span>
+                @include('partials.icon', ['i' => 'refresh-cw']) <span data-stats-label>{{ $hasReport ? __('ui.stats_refresh') : __('ui.stats_generate') }}</span>
             </button>
         </div>
         <div class="stats-body" data-stats-body aria-live="polite">
-            <p class="stats-empty muted">@include('partials.icon', ['i' => 'square-dashed']) {{ __('ui.stats_placeholder') }}</p>
+            @if ($hasReport)
+                <p class="stats-empty muted">@include('partials.icon', ['i' => 'loader-circle', 'class' => 'spin']) {{ __('ui.stats_loading_saved') }}</p>
+            @else
+                <p class="stats-empty muted">@include('partials.icon', ['i' => 'square-dashed']) {{ __('ui.stats_placeholder') }}</p>
+            @endif
         </div>
     </section>
 

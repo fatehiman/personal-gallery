@@ -258,18 +258,49 @@ class FeaturesTest extends TestCase
         \Illuminate\Support\Facades\Http::assertSent(fn ($req) => str_ends_with($req->url(), '/sendDocument'));
     }
 
-    public function test_scan_page_does_not_load_the_report_and_only_the_admin_can_ask_for_it(): void
+    public function test_scan_page_does_not_count_files_and_only_the_admin_can_use_the_report(): void
     {
         $admin = $this->user(true);
         \DB::enableQueryLog();
         $this->actingAs($admin)->get('/admin/scans')->assertOk()
-            ->assertSee('data-stats-load', false)->assertSee(__('ui.stats_placeholder'));
+            ->assertSee('data-stats-load', false)->assertSee('data-has-report="0"', false)->assertSee(__('ui.stats_placeholder'));
         foreach (\DB::getQueryLog() as $q) {
             $this->assertDoesNotMatchRegularExpression('/from\s+["`]?media["`]?(\s|$)/i', $q['query'], 'the page must not count files');
         }
+        $this->actingAs($admin)->getJson('/api/admin/scan/stats')->assertOk()->assertJsonPath('report', null);
 
         $this->flushSession();
-        $this->actingAs($this->user())->getJson('/api/admin/scan/stats')->assertForbidden();
+        $user = $this->user();
+        $this->actingAs($user)->getJson('/api/admin/scan/stats')->assertForbidden();
+        $this->actingAs($user)->postJson('/api/admin/scan/stats')->assertForbidden();
+        $this->assertSame(0, \DB::table('scan_reports')->count());
+    }
+
+    public function test_scan_report_is_saved_with_its_time_and_shown_again_without_counting(): void
+    {
+        $admin = $this->user(true);
+        $made = $this->actingAs($admin)->postJson('/api/admin/scan/stats')->assertOk()->json('report');
+        $this->assertSame(1, \DB::table('scan_reports')->count());
+        $this->assertSame($admin->id, (int) \DB::table('scan_reports')->value('user_id'));
+        $this->assertMatchesRegularExpression('/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/', $made['generated_at']);
+
+        // The page knows there is a report (and shows no "not generated" text); reading it runs no count.
+        $this->actingAs($admin)->get('/admin/scans')->assertOk()
+            ->assertSee('data-has-report="1"', false)->assertDontSee(__('ui.stats_placeholder'));
+        \DB::enableQueryLog();
+        $this->actingAs($admin)->getJson('/api/admin/scan/stats')->assertOk()->assertJsonPath('report', $made);
+        foreach (\DB::getQueryLog() as $q) {
+            $this->assertDoesNotMatchRegularExpression('/from\s+["`]?media["`]?(\s|$)/i', $q['query']);
+        }
+
+        // A new report is added, and the newest one is shown. Only the last 100 are kept.
+        \DB::table('scan_reports')->insert(array_map(
+            fn ($i) => ['user_id' => null, 'data' => json_encode(['generated_at' => 'old']), 'created_at' => now()->subDays(5)],
+            range(1, 104)
+        ));
+        $newest = $this->actingAs($admin)->postJson('/api/admin/scan/stats')->assertOk()->json('report');
+        $this->assertSame(100, \DB::table('scan_reports')->count());
+        $this->actingAs($admin)->getJson('/api/admin/scan/stats')->assertJsonPath('report', $newest);
     }
 
     public function test_scan_stats_count_only_what_is_in_the_database(): void
@@ -281,21 +312,17 @@ class FeaturesTest extends TestCase
         Media::where('path', 'A/B/mid.jpg')->update(['gps_lat' => 1.5, 'gps_lng' => 2.5]);
 
         $admin = $this->user(true);
-        $r = $this->actingAs($admin)->getJson('/api/admin/scan/stats')->assertOk();
-        $r->assertJsonPath('folders', ['total' => 6, 'listed' => 6])
-            ->assertJsonPath('files.total', 4)       // 3 visible photos + notes.txt; the hidden one is not counted
-            ->assertJsonPath('files.hidden', 1)
-            ->assertJsonPath('files.gps', 1)
-            ->assertJsonPath('types.0.count', 3)     // image
-            ->assertJsonPath('types.1.count', 0)     // video
-            ->assertJsonPath('types.2.count', 1)     // other
-            ->assertJsonPath('read', ['read' => 2, 'pending' => 0, 'errors' => 1]); // "other" files are never read
-        $this->assertSame(['jpg' => 3, 'txt' => 1], collect($r->json('exts'))->pluck('count', 'ext')->all());
-        $this->assertSame(
-            (int) Media::sum('size'),
-            (int) $r->json('files.size')
-        );
-        $this->assertNotEmpty($r->json('generated_at'));
+        $r = $this->actingAs($admin)->postJson('/api/admin/scan/stats')->assertOk();
+        $r->assertJsonPath('report.folders', ['total' => 6, 'listed' => 6])
+            ->assertJsonPath('report.files.total', 4)       // 3 visible photos + notes.txt; the hidden one is not counted
+            ->assertJsonPath('report.files.hidden', 1)
+            ->assertJsonPath('report.files.gps', 1)
+            ->assertJsonPath('report.types.0.count', 3)     // image
+            ->assertJsonPath('report.types.1.count', 0)     // video
+            ->assertJsonPath('report.types.2.count', 1)     // other
+            ->assertJsonPath('report.read', ['read' => 2, 'pending' => 0, 'errors' => 1]); // "other" files are never read
+        $this->assertSame(['jpg' => 3, 'txt' => 1], collect($r->json('report.exts'))->pluck('count', 'ext')->all());
+        $this->assertSame((int) Media::sum('size'), (int) $r->json('report.files.size'));
     }
 
     public function test_crawler_stops_when_time_is_over_and_continues_in_the_same_place(): void

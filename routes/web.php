@@ -72,6 +72,7 @@ Route::middleware(['auth', 'auth.session', TrackActivity::class])->group(functio
             Route::get('/dirs', [FolderController::class, 'dirs']);
             Route::get('/scan', [ScanController::class, 'status']);
             Route::get('/scan/stats', [ScanController::class, 'stats']);
+            Route::post('/scan/stats', [ScanController::class, 'generateStats']);
             Route::post('/scan', [ScanController::class, 'start']);
             Route::post('/scan/stop', [ScanController::class, 'stop']);
         });

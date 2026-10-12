@@ -38,16 +38,38 @@ class ScanController extends Controller
         return view('admin.scans', [
             'jobs' => ScanJob::with('user')->latest('id')->limit(50)->get(),
             'logs' => DB::table('crawl_logs')->orderByDesc('id')->limit(300)->get(),
+            'hasReport' => DB::table('scan_reports')->exists(), // only the answer; the page loads the report itself by Ajax
         ]);
     }
 
-    /**
-     * Statistics of everything the gallery knows (database only, the storage box is never touched).
-     * The count reads the whole media table, so the page does not load it: the admin asks for it with a button.
-     * One pass, no WHERE: the hidden flag is a group column, so MySQL reads the table in order (about 40% faster
-     * than going through the hidden_at index).
-     */
+    /** The newest saved statistics report (a cheap read of one row), or null when none was made yet. */
     public function stats()
+    {
+        $row = DB::table('scan_reports')->orderByDesc('id')->first();
+
+        return response()->json(['report' => $row ? json_decode($row->data, true) : null]);
+    }
+
+    /**
+     * Make a new statistics report of everything the gallery knows (database only, the storage box is never touched),
+     * save it with its date and time, and return it. The count reads the whole media table, so it only runs when the
+     * admin presses the button. One pass, no WHERE: the hidden flag is a group column, so MySQL reads the table in order
+     * (about 40% faster than going through the hidden_at index).
+     */
+    public function generateStats(Request $request)
+    {
+        $report = $this->buildStats();
+        DB::table('scan_reports')->insert(['user_id' => $request->user()->id, 'data' => json_encode($report), 'created_at' => now()]);
+        // Keep the last 100 reports.
+        $keep = DB::table('scan_reports')->orderByDesc('id')->skip(99)->limit(1)->value('id');
+        if ($keep) {
+            DB::table('scan_reports')->where('id', '<', $keep)->delete();
+        }
+
+        return response()->json(['report' => $report]);
+    }
+
+    private function buildStats(): array
     {
         $t0 = microtime(true);
         $rows = Media::withoutGlobalScopes()->selectRaw(
@@ -71,7 +93,7 @@ class ScanController extends Controller
         $read = $sum($readable, 'scanned');
         $dirs = Directory::query()->selectRaw('COUNT(*) AS total, SUM(listed_at IS NOT NULL) AS listed')->first();
 
-        return response()->json([
+        return [
             'generated_at' => now()->utc()->toIso8601ZuluString(),
             'ms' => (int) round((microtime(true) - $t0) * 1000),
             'folders' => ['total' => (int) $dirs->total, 'listed' => (int) $dirs->listed],
@@ -80,7 +102,7 @@ class ScanController extends Controller
             'types' => $types,
             'exts' => $exts->take(40)->all(),
             'read' => ['read' => $read - $sum($readable, 'errors'), 'pending' => $sum($readable, 'n') - $read, 'errors' => $sum($readable, 'errors')],
-        ]);
+        ];
     }
 
     public function status()
