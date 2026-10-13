@@ -11,11 +11,24 @@ class TrackActivity
 {
     public function handle(Request $request, Closure $next)
     {
-        // Automatic polls (storage "Retry", admin scan status) are not user activity.
-        if ($request->user() && ! $request->is('api/health', 'api/admin/scan')) {
-            Activity::touch();
+        if ($request->user() && self::counts($request)) {
+            Activity::touch($request->user()->username);
         }
 
         return $next($request);
+    }
+
+    /**
+     * Only requests that may read the storage box count. Not counted: automatic polls (storage "Retry"), profile
+     * pictures (local files, loaded with every page), the admin pages and admin API (scan jobs, statistics, users,
+     * settings: database only). Still counted there: the folder picker (lists the storage) and "Send now" (reads files).
+     */
+    private static function counts(Request $request): bool
+    {
+        if ($request->is('api/admin/dirs', 'admin/settings/send-now')) {
+            return true;
+        }
+
+        return ! $request->is('api/health', 'avatar/*', 'admin', 'admin/*', 'api/admin', 'api/admin/*');
     }
 }

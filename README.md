@@ -128,9 +128,13 @@ It goes through all folders in a fixed order (depth first, by name) and remember
 - It pauses while an admin scan job runs. It uses the same read slots (max 2 reads at once) as everything else.
 - **Users have priority.** Every user request that can use the storage box (pages, API calls, and thumbnails or
   originals that are read from the storage) saves the time in `settings.last_user_browsing` (written at most every
-  10 s; `App\Gallery\Activity`). The automatic polls (`/api/health`, admin scan status) do not count. While the last
-  activity is **less than 5 minutes** old, the crawler does nothing (log note `paused: a user is browsing`), and a
-  run that is already working stops at the next folder or file (`stopped: a user started browsing`). A long video read
+  10 s; `App\Gallery\Activity`), with the username (`settings.last_user_browsing_by`). Not counted: the automatic
+  polls (`/api/health`, admin scan status), profile pictures, and the **admin pages** and admin API (*Scan jobs*,
+  statistics, users, settings: they read only the database). Still counted there: the folder picker (it lists the
+  storage) and *Send today's memories now*. While the last activity is **less than 5 minutes** old, the crawler does
+  nothing (log note `paused: a user is browsing (username)`), and a run that is already working stops at the next
+  folder or file (`stopped: a user started browsing (username)`). Thumbnails and originals have no session: they
+  update only the time, so the note shows the last user who opened a page. A long video read
   is stopped too (checked every 2 s); that video is not marked and is read again later. The 3-minute
   rhythm continues by itself 5 minutes after the last user activity.
 

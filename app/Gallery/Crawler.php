@@ -78,7 +78,7 @@ class Crawler
             'folders' => $this->stats['folders'], 'listed' => $this->stats['listed'],
             'new_files' => max(0, Media::withoutGlobalScopes()->count() - $filesBefore),
             'scanned' => $this->stats['scanned'], 'errors' => $this->stats['errors'],
-            'note' => $note,
+            'note' => $note === null ? null : mb_substr($note, 0, 150),
         ]);
         DB::table('crawl_logs')->where('started_at', '<', now()->subDays(self::LOG_DAYS))->delete();
     }
@@ -93,7 +93,7 @@ class Crawler
             return 'paused: admin scan is running'; // it does the same work, do not read twice
         }
         if (Activity::recent()) {
-            return 'paused: a user is browsing'; // users have priority on the slow storage
+            return 'paused: a user is browsing'.Activity::whoSuffix(); // users have priority on the slow storage
         }
         if (! Health::ok(true)) {
             return 'storage not available';
@@ -106,7 +106,7 @@ class Crawler
         try {
             while (time() < $end) {
                 if (Activity::recent()) {
-                    return 'stopped: a user started browsing';
+                    return 'stopped: a user started browsing'.Activity::whoSuffix();
                 }
                 $dir = $this->open($pos);
                 if (! $dir) {
@@ -122,7 +122,7 @@ class Crawler
                 $pending = Media::where('directory_id', $dir->id)->whereNull('scanned_at')->whereIn('type', ['image', 'video']);
                 while (time() < $end && ($m = (clone $pending)->orderBy('filename')->first())) {
                     if (Activity::recent()) {
-                        return 'stopped: a user started browsing';
+                        return 'stopped: a user started browsing'.Activity::whoSuffix();
                     }
                     if (! $slots->acquire(20)) {
                         return 'read slots busy';
@@ -135,7 +135,7 @@ class Crawler
                     }
                     if ($m->scanned_at === null) {
                         // Not marked: the same file again next time.
-                        return Activity::recent() ? 'stopped: a user started browsing' : 'storage not available';
+                        return Activity::recent() ? 'stopped: a user started browsing'.Activity::whoSuffix() : 'storage not available';
                     }
                     $this->stats['scanned']++;
                     $ok || $this->stats['errors']++;

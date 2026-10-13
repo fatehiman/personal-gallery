@@ -498,12 +498,15 @@ class FeaturesTest extends TestCase
         Directory::query()->delete();
         app(Crawler::class)->run(10);
         $this->assertSame(0, Media::whereNotNull('scanned_at')->count());
-        $this->assertStringContainsString('user is browsing', (string) \DB::table('crawl_logs')->value('note'));
+        $this->assertSame('paused: a user is browsing ('.$admin->username.')', \DB::table('crawl_logs')->value('note'));
 
-        // The polls of the storage retry button and of the scan status are not activity.
+        // Polls (storage retry, scan status), profile pictures and the admin pages (e.g. Scan jobs) are not activity.
         Settings::set(Activity::KEY, time() - 6 * 60);
         $this->actingAs($admin)->getJson('/api/health')->assertOk();
         $this->actingAs($admin)->getJson('/api/admin/scan')->assertOk();
+        $this->actingAs($admin)->get('/admin/scans')->assertOk();
+        $this->actingAs($admin)->get('/admin/settings')->assertOk();
+        $this->actingAs($admin)->get('/admin/users')->assertOk();
         $this->assertFalse(Activity::recent());
         app(Crawler::class)->run(15);
         $this->assertSame(4, Media::whereNotNull('scanned_at')->count());
