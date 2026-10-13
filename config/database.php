@@ -59,6 +59,9 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // The app works in UTC. Without this MySQL uses the server zone (Europe/Berlin on ger1), and NOW() or
+            // a TIMESTAMP column would convert the values (see migration 2026_10_13_000001_timestamps_to_datetime).
+            'timezone' => '+00:00',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

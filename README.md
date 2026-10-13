@@ -136,7 +136,11 @@ It goes through all folders in a fixed order (depth first, by name) and remember
 
 ## Time zones
 
-The project time zone is `GALLERY_TZ` (default `Asia/Tehran`, IRST). Dates are stored in UTC. The column
+The project time zone is `GALLERY_TZ` (default `Asia/Tehran`, IRST). Dates are stored in UTC, in `DATETIME`
+columns (never `TIMESTAMP`), and the MySQL session runs in UTC (`'timezone' => '+00:00'` in `config/database.php`).
+A `TIMESTAMP` column converts values with the server zone: a UTC date in that zone's missing summer-time hour
+(for example `2011-03-27 02:50` in Europe/Berlin) is refused, and dates before 1970 or after 2038 do not fit. The
+column
 `users.timezone` (empty = project time zone) is ready for a per-user setting; `User::tz()` already uses it for
 *On this day*. There is no screen for it yet.
 

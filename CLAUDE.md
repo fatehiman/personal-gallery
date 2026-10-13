@@ -38,4 +38,6 @@ Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md fi
 - Keep colors light/pastel; both themes must be updated when adding UI.
 - User preferences (view, sort, folderless) live in `users.prefs` (server), never in `localStorage`. Default sort: newest first.
 - Time zone: `User::tz()` (own zone, else `GALLERY_TZ`). Never hard-code `Asia/Tehran`.
+- Date columns are `DATETIME` in UTC: in migrations use `dateTime()` / `datetimes()`, never `timestamp()` /
+  `timestamps()` (a MySQL `TIMESTAMP` breaks on summer-time gaps and before 1970).
 - Run `php artisan test` before committing. Deploy with `bash deploy/deploy.sh`.
