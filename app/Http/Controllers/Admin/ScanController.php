@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Gallery\Crawler;
 use App\Gallery\Paths;
 use App\Http\Controllers\Controller;
 use App\Models\Directory;
@@ -39,7 +40,16 @@ class ScanController extends Controller
             'jobs' => ScanJob::with('user')->latest('id')->limit(50)->get(),
             'logs' => DB::table('crawl_logs')->orderByDesc('id')->limit(300)->get(),
             'hasReport' => DB::table('scan_reports')->exists(), // only the answer; the page loads the report itself by Ajax
+            'idleUntil' => Crawler::idleUntil(),
         ]);
+    }
+
+    /** End the 3-hour wait of the background scan: it runs every 3 minutes again. */
+    public function wake()
+    {
+        Crawler::wake();
+
+        return back()->with('ok', __('ui.crawl_woken'));
     }
 
     /** The newest saved statistics report (a cheap read of one row), or null when none was made yet. */

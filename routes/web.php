@@ -84,6 +84,7 @@ Route::middleware(['auth', 'auth.session', TrackActivity::class])->group(functio
         Route::put('/users/{user}/folders/{folder}', [FolderController::class, 'update'])->name('folders.update');
         Route::delete('/users/{user}/folders/{folder}', [FolderController::class, 'destroy'])->name('folders.destroy');
         Route::get('/scans', [ScanController::class, 'index'])->name('scans');
+        Route::post('/scans/wake', [ScanController::class, 'wake'])->name('scans.wake');
         Route::get('/settings', [SettingsController::class, 'show'])->name('settings');
         Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
         Route::post('/settings/send-now', [SettingsController::class, 'sendNow'])->name('settings.send');

@@ -62,6 +62,18 @@
 
     <h2 class="section-h">@include('partials.icon', ['i' => 'clock']) {{ __('ui.crawl_log') }}</h2>
     <p class="muted small">{{ __('ui.crawl_log_hint') }}</p>
+    <form class="card crawl-mode" method="post" action="{{ route('admin.scans.wake') }}">
+        @csrf
+        <p>
+            @if ($idleUntil)
+                @include('partials.icon', ['i' => 'timer']) {{ __('ui.crawl_mode_idle', ['h' => \App\Gallery\Crawler::IDLE_HOURS]) }}
+                {{ __('ui.crawl_next_round') }}: <time data-dt="{{ $idleUntil->utc()->toIso8601ZuluString() }}"></time>
+            @else
+                @include('partials.icon', ['i' => 'refresh-cw']) {{ __('ui.crawl_mode_fast') }}
+            @endif
+        </p>
+        <button class="btn primary" type="submit" @disabled(! $idleUntil)>@include('partials.icon', ['i' => 'play']) {{ __('ui.crawl_wake') }}</button>
+    </form>
     <div class="card table-card">
         @if ($logs->isEmpty())
             <p class="muted">{{ __('ui.crawl_log_empty') }}</p>

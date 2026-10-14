@@ -437,6 +437,8 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .fr-path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .add-folder { border-top: 1px dashed var(--border); padding-top: 16px; }
 .table-card { padding: 6px; }
+.crawl-mode { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 14px; }
+.crawl-mode p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .table-scroll { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: .9em; }
 .table th, .table td { padding: 8px 10px; text-align: start; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }

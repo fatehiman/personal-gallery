@@ -194,7 +194,7 @@ class FeaturesTest extends TestCase
         $this->assertSame($oldSize, (int) $m->refresh()->size); // folder date unchanged: not listed
 
         Directory::where('path', 'A')->update(['listed_at' => now()->subDays(Crawler::RECHECK_DAYS + 1)]);
-        app(Crawler::class)->run(15);
+        app(Crawler::class)->run(15, true); // the round before found nothing new: force, do not wait 3 hours
         $m->refresh();
         $this->assertSame($oldSize + 1, (int) $m->size);
         $this->assertSame($oldV + 1, (int) $m->thumb_v);
@@ -510,6 +510,37 @@ class FeaturesTest extends TestCase
         $this->assertFalse(Activity::recent());
         app(Crawler::class)->run(15);
         $this->assertSame(4, Media::whereNotNull('scanned_at')->count());
+    }
+
+    public function test_crawler_waits_3_hours_after_a_round_with_nothing_new_and_the_admin_can_end_the_wait(): void
+    {
+        $admin = $this->user(true);
+        $crawler = app(Crawler::class);
+        $crawler->run(15); // first round: finds and reads 4 files, so no wait
+        $this->assertNull(Crawler::idleUntil());
+        $crawler->run(15); // second round: nothing new
+        $this->assertNotNull(Crawler::idleUntil());
+        $this->assertStringContainsString('nothing new, next round in 3 h', (string) \DB::table('crawl_logs')->orderByDesc('id')->value('note'));
+
+        // While waiting a run does nothing and writes no line.
+        $lines = \DB::table('crawl_logs')->count();
+        $crawler->run(15);
+        $this->assertSame($lines, \DB::table('crawl_logs')->count());
+        $this->actingAs($admin)->get('/admin/scans')->assertOk()->assertSee(__('ui.crawl_next_round'));
+
+        // The button ends the wait. A round that finds a new file is followed at once by the next round.
+        $this->actingAs($admin)->post('/admin/scans/wake')->assertRedirect();
+        $this->assertNull(Crawler::idleUntil());
+        file_put_contents($this->root.'/A/new.jpg', file_get_contents($this->root.'/A/top.jpg'));
+        touch($this->root.'/A', time() + 5);
+        clearstatcache();
+        $crawler->run(15);
+        $this->assertSame(5, Media::whereNotNull('scanned_at')->count());
+        $this->assertNull(Crawler::idleUntil());
+        $crawler->run(15);
+        $this->assertNotNull(Crawler::idleUntil());
+        $this->actingAs($this->user())->post('/admin/scans/wake'); // not an admin: no effect
+        $this->assertNotNull(Crawler::idleUntil());
     }
 
     public function test_search_is_limited_to_the_folder_and_returns_its_breadcrumbs(): void

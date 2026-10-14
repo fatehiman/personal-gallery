@@ -5,6 +5,7 @@ namespace App\Gallery;
 use App\Models\Directory;
 use App\Models\Media;
 use App\Models\ScanJob;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
@@ -22,12 +23,24 @@ use Throwable;
  * A new file is started only inside the budget (about 20 s). A video can take longer (ffprobe + first frame on the
  * slow storage); it may go on after the budget, but a run never works more than MAX_SECONDS (below the 3 minutes).
  * Every run writes one line to crawl_logs (kept 10 days).
+ * Waiting: when a full round found nothing new (no new file, no new folder, no file read), the next round starts only
+ * IDLE_HOURS later (settings.crawl_idle_until); the runs in that time do nothing and write no log line. A round that
+ * found something is followed at once by the next round (every 3 minutes), until a round finds nothing new.
+ * The admin can end the wait on the Scan jobs page (wake()).
  */
 class Crawler
 {
     public const POS = 'crawl_pos';
 
     public const LOG_DAYS = 10;
+
+    /** Date and time (ISO) before which no round starts: set when a full round found nothing new. */
+    public const IDLE = 'crawl_idle_until';
+
+    /** New files + new folders + files read, summed over the runs of the current round. */
+    public const ROUND_CHANGES = 'crawl_round_changes';
+
+    public const IDLE_HOURS = 3;
 
     /** Hard limit of one run (seconds), also for a long video. The next run starts 180 s after this one. */
     public const MAX_SECONDS = 150;
@@ -41,6 +54,8 @@ class Crawler
     /** @var array{folders:int, listed:int, scanned:int, errors:int} */
     private array $stats;
 
+    private bool $roundFinished = false;
+
     public function __construct(private Indexer $indexer, private Scanner $scanner) {}
 
     public static function enabled(): bool
@@ -53,15 +68,33 @@ class Crawler
         return max(5, min(50, Settings::int('crawl_seconds', 20)));
     }
 
-    public function run(?int $budget = null): void
+    /** Time until the crawler waits (the last full round found nothing new), or null when it runs every 3 minutes. */
+    public static function idleUntil(): ?Carbon
     {
-        if (! self::enabled()) {
+        $v = Settings::get(self::IDLE);
+        $until = $v ? Carbon::parse($v) : null;
+
+        return $until && $until->isFuture() ? $until : null;
+    }
+
+    /** End the wait: the next run (within 3 minutes) starts a new round. */
+    public static function wake(): void
+    {
+        Settings::set(self::IDLE, null);
+    }
+
+    /** @param  bool  $force  run also while waiting (gallery:crawl --force) */
+    public function run(?int $budget = null, bool $force = false): void
+    {
+        if (! self::enabled() || (! $force && self::idleUntil())) {
             return;
         }
         $t0 = microtime(true);
         $from = (string) Settings::get(self::POS, '');
         $filesBefore = Media::withoutGlobalScopes()->count();
+        $dirsBefore = Directory::count();
         $this->stats = ['folders' => 0, 'listed' => 0, 'scanned' => 0, 'errors' => 0];
+        $this->roundFinished = false;
         $note = null;
         try {
             $note = $this->walk($budget ?? self::seconds(), $t0 + self::MAX_SECONDS);
@@ -71,12 +104,22 @@ class Crawler
             $this->stats['errors']++;
         }
         $to = (string) Settings::get(self::POS, '');
+        $newFiles = max(0, Media::withoutGlobalScopes()->count() - $filesBefore);
+        $changes = Settings::int(self::ROUND_CHANGES, 0) + $newFiles + max(0, Directory::count() - $dirsBefore) + $this->stats['scanned'];
+        if ($this->roundFinished) {
+            if ($changes === 0) {
+                Settings::set(self::IDLE, now()->addHours(self::IDLE_HOURS)->toIso8601String());
+                $note .= '; nothing new, next round in '.self::IDLE_HOURS.' h';
+            }
+            $changes = 0; // a new round starts
+        }
+        Settings::set(self::ROUND_CHANGES, $changes);
         DB::table('crawl_logs')->insert([
             'started_at' => now()->subSeconds((int) round(microtime(true) - $t0)),
             'seconds' => round(microtime(true) - $t0, 1),
             'from_path' => $from, 'to_path' => $to,
             'folders' => $this->stats['folders'], 'listed' => $this->stats['listed'],
-            'new_files' => max(0, Media::withoutGlobalScopes()->count() - $filesBefore),
+            'new_files' => $newFiles,
             'scanned' => $this->stats['scanned'], 'errors' => $this->stats['errors'],
             'note' => $note === null ? null : mb_substr($note, 0, 150),
         ]);
@@ -148,6 +191,7 @@ class Crawler
                     Settings::set('crawl_cycles', Settings::int('crawl_cycles', 0) + 1);
                     Settings::set('crawl_cycle_at', now()->toIso8601String());
                     Settings::set(self::POS, '');
+                    $this->roundFinished = true;
 
                     return 'round finished, starts again from the first folder';
                 }

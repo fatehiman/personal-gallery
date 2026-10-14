@@ -123,6 +123,14 @@ It goes through all folders in a fixed order (depth first, by name) and remember
   go on after that, but a run never works more than **150 seconds** (`Crawler::MAX_SECONDS`), so it always ends before
   the next run. A video that cannot be read in that time is marked with an error (`scan_error`) and counted in *errors*.
 - At the end of the tree it starts again from the first folder. After the first rounds it only finds new files and folders.
+- **Waiting (3 hours)**: when a full round found **nothing new** (no new file, no new folder, no file read), the next
+  round starts only **3 hours** later (`Crawler::IDLE_HOURS`, `settings.crawl_idle_until`). The runs in that time do
+  nothing and write no log line; the log line of that round ends with `nothing new, next round in 3 h`. A round takes
+  only a few runs (about 10 minutes for ~1,100 folders), so in practice there is one quick round every 3 hours.
+  A round that found something is followed at once by the next round, every 3 minutes, until a round finds nothing
+  new. The *Scan jobs* page shows the mode and the time of the next round; its button **Scan every 3 minutes**
+  (enabled only while waiting) ends the wait, for example right after copying new photos to the storage box.
+  `gallery:crawl --force` runs once also while waiting.
 - Every run writes **one line** to the log (`crawl_logs`), shown on *Scan jobs* (last 300 runs; lines older than 10 days
   are deleted): time, seconds, from/to folder, folders checked, new files, files read, errors, result.
 - It pauses while an admin scan job runs. It uses the same read slots (max 2 reads at once) as everything else.
@@ -212,7 +220,7 @@ Useful commands:
 | `gallery:user <username> [--admin] [--name=] [--password-stdin]` | create a user or reset a password |
 | `gallery:work` | run the active scan job for ~55 s (the scheduler starts it every minute) |
 | `gallery:geocode` | find city/country names for photos with GPS (1 request per second) |
-| `gallery:crawl [--budget=20]` | background scan: walk folders, read new files, for a few seconds (scheduler: every 3 min) |
+| `gallery:crawl [--budget=20] [--force]` | background scan: walk folders, read new files, for a few seconds (scheduler: every 3 min; waits 3 h after a round with nothing new, `--force` ignores the wait) |
 | `gallery:copy-video <id>` | copy one video to the local temporary folder, and convert it if needed (started by the web app) |
 | `gallery:video-drop <id> [--delay=]` | delete one video's local files a few seconds after the last viewer left (started by the web app) |
 | `gallery:video-clean [--minutes=]` | delete local video copies that no viewer shows (scheduler: every minute) |
