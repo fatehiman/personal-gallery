@@ -114,6 +114,7 @@ input[disabled] { background: var(--surface2); color: var(--muted); }
 .input-ic input { padding-inline-start: 36px; }
 .grow { flex: 1; }
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 500; }
+.check-row { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 10px; }
 .check input { width: 18px; height: 18px; accent-color: var(--primary); flex: none; }
 .checks { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 12px; }
 .picker-input { display: flex; gap: 8px; }

@@ -24,6 +24,51 @@ class TelegramDigest
         return Settings::bool('telegram_enabled') && Settings::get('telegram_token') && Settings::get('telegram_chat');
     }
 
+    /** Weekdays as ISO numbers (1 = Monday … 7 = Sunday) chosen by the admin. */
+    public static function weekdays(): array
+    {
+        $days = array_map('intval', array_filter(explode(',', (string) Settings::get('otd_weekdays', '4')))); // default: Thursday
+
+        return array_values(array_unique(array_filter($days, fn ($d) => $d >= 1 && $d <= 7)));
+    }
+
+    public static function time(): string
+    {
+        $t = (string) Settings::get('otd_time', '20:00');
+
+        return preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $t) ? $t : '20:00';
+    }
+
+    public static function mode(): string
+    {
+        return Settings::get('otd_mode', 'weekdays') === 'interval' ? 'interval' : 'weekdays';
+    }
+
+    /**
+     * Is the scheduled digest due now? One send per day at most, after the fixed time, and either
+     * every N days since the last send or on the chosen weekdays.
+     */
+    public static function due(Carbon $now): bool
+    {
+        if ($now->format('H:i') < self::time()) {
+            return false;
+        }
+        $today = $now->toDateString();
+        $last = Settings::get('otd_last_sent');
+        if ($last === $today) {
+            return false;
+        }
+        if (self::mode() === 'weekdays') {
+            return in_array($now->dayOfWeekIso, self::weekdays(), true);
+        }
+        if (! $last) {
+            return true;
+        }
+        $n = max(1, Settings::int('otd_interval_days', 1));
+
+        return Carbon::parse($last, $now->getTimezone())->addDays($n)->toDateString() <= $today;
+    }
+
     /** @return array{images: \Illuminate\Support\Collection, videos: \Illuminate\Support\Collection} */
     public function pick(?Carbon $today = null): array
     {

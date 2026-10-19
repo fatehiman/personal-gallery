@@ -36,6 +36,11 @@ class SettingsController extends Controller
             'otd_max_images' => ['required', 'integer', 'min:0', 'max:50'],
             'otd_max_videos' => ['required', 'integer', 'min:0', 'max:20'],
             'crawl_seconds' => ['required', 'integer', 'min:5', 'max:50'],
+            'otd_mode' => ['nullable', 'in:interval,weekdays'],
+            'otd_interval_days' => ['nullable', 'integer', 'min:1', 'max:365'],
+            'otd_weekdays' => ['required_if:otd_mode,weekdays', 'nullable', 'array'],
+            'otd_weekdays.*' => ['integer', 'between:1,7'],
+            'otd_time' => ['nullable', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
         ]);
         // An empty token field keeps the saved token. "Remove token" clears it.
         if (! empty($data['telegram_token'])) {
@@ -47,6 +52,13 @@ class SettingsController extends Controller
         Settings::set('telegram_enabled', $request->boolean('telegram_enabled') ? 1 : 0);
         foreach (['otd_min_years', 'otd_max_images', 'otd_max_videos', 'crawl_seconds'] as $k) {
             Settings::set($k, $data[$k]);
+        }
+        // Schedule fields are optional so older forms keep the saved schedule.
+        if (isset($data['otd_mode'])) {
+            Settings::set('otd_mode', $data['otd_mode']);
+            Settings::set('otd_interval_days', $data['otd_interval_days'] ?? 1);
+            Settings::set('otd_weekdays', implode(',', array_unique(array_map('intval', $data['otd_weekdays'] ?? []))));
+            Settings::set('otd_time', $data['otd_time'] ?? '20:00');
         }
         Settings::set('crawl_enabled', $request->boolean('crawl_enabled') ? 1 : 0);
 

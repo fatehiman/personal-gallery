@@ -26,6 +26,25 @@
             <label class="field"><span>{{ __('ui.otd_max_videos') }}</span>
                 <input type="number" name="otd_max_videos" min="0" max="20" required value="{{ old('otd_max_videos', \App\Gallery\Settings::int('otd_max_videos', 2)) }}"></label>
         </div>
+        @php
+            $mode = old('otd_mode', \App\Gallery\TelegramDigest::mode());
+            $chosen = old('otd_weekdays', \App\Gallery\TelegramDigest::weekdays());
+            $dayOrder = app()->getLocale() === 'fa' ? [6, 7, 1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6, 7];
+        @endphp
+        <h3 class="section-h">{{ __('ui.otd_schedule') }}</h3>
+        <label class="check"><input type="radio" name="otd_mode" value="weekdays" @checked($mode === 'weekdays')> <span>{{ __('ui.otd_mode_weekdays') }}</span></label>
+        <div class="check-row">
+            @foreach ($dayOrder as $d)
+                <label class="check"><input type="checkbox" name="otd_weekdays[]" value="{{ $d }}" @checked(in_array($d, array_map('intval', (array) $chosen), true))> <span>{{ __('ui.otd_day_'.$d) }}</span></label>
+            @endforeach
+        </div>
+        <label class="check"><input type="radio" name="otd_mode" value="interval" @checked($mode === 'interval')> <span>{{ __('ui.otd_mode_interval') }}</span></label>
+        <div class="grid2">
+            <label class="field"><span>{{ __('ui.otd_interval_days') }}</span>
+                <input type="number" name="otd_interval_days" min="1" max="365" value="{{ old('otd_interval_days', \App\Gallery\Settings::int('otd_interval_days', 7)) }}"></label>
+            <label class="field"><span>{{ __('ui.otd_time') }}</span>
+                <input type="time" name="otd_time" required dir="ltr" value="{{ old('otd_time', \App\Gallery\TelegramDigest::time()) }}"></label>
+        </div>
         @if ($hasToken)
             <label class="check"><input type="checkbox" name="clear_token" value="1"> <span>{{ __('ui.token_remove') }}</span></label>
         @endif

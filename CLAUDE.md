@@ -10,7 +10,7 @@ Laravel 13 + MySQL + Blade + plain JS (no Vite, no npm build). Read README.md fi
   `ScanWorker` (the single scan job, time-boxed, resumable), `Geocoder` (Nominatim, 1 req/s, cached per ~1 km),
   `Signer` (HMAC media URLs), `Presenter` (JSON for the browser), `Avatars`, `Crawler` (slow background walk, every 3 min,
   ~20 s, resumable, uses `Indexer` + `Scanner`; waits 3 h after a full round that found nothing new), `OtdFolders` ("On this day" flags, nearest-row-wins, recursive),
-  `Settings` (key/value in DB, the Telegram token is encrypted), `TelegramDigest` (daily message, admins only).
+  `Settings` (key/value in DB, the Telegram token is encrypted), `TelegramDigest` (scheduled message: weekdays or every N days, one time; admins only).
 - `routes/media.php` — signed media routes **without** the web middleware (no session, no cookies → CDN cacheable).
 - `public/assets/` — `app.js` (helpers, dates, Jalali, suggest, date picker), `gallery.js` (browser, views,
   lazy loading, search, scan), `viewer.js` (lightbox, faces, tags), `map.js`, `admin.js`, `base.css` +

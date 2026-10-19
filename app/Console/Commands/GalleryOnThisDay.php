@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 
 class GalleryOnThisDay extends Command
 {
-    protected $signature = 'gallery:otd-telegram {--force : send again even if already sent today}';
+    protected $signature = 'gallery:otd-telegram {--force : send now, ignore the schedule (interval, weekdays, time)}';
 
     protected $description = 'Send today\'s "On this day" photos and videos (flagged folders of admins) to Telegram';
 
@@ -21,7 +21,7 @@ class GalleryOnThisDay extends Command
             return self::SUCCESS;
         }
         $today = Carbon::now(config('app.display_timezone'));
-        if (! $this->option('force') && Settings::get('otd_last_sent') === $today->toDateString()) {
+        if (! $this->option('force') && ! TelegramDigest::due($today)) {
             return self::SUCCESS;
         }
         Settings::set('otd_last_sent', $today->toDateString()); // set first: a slow run must not be started twice

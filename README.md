@@ -22,7 +22,7 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
   if it is old. The *Refresh report* button makes a new one. It reads only the database. The count is heavy, so it runs only
   when the button is pressed, never with the page.
 - **Admin settings** (menu *Settings*): Telegram bot token, group/channel ID, minimum years, max images and max videos
-  for the daily "On this day" message; background scan on/off and seconds per run.
+  for the scheduled "On this day" message (weekdays or every N days, one time); background scan on/off and seconds per run.
 - **Six views**: Mosaic, Small tiles, Gallery (default), Large tiles, **Quick list** (names, size, date only — no file is
   read) and **Detailed list** (date taken, dimensions, camera, location, tags, people, description).
 - **Sort** by name, date, size (both directions) or type. The default is **newest first**. The sort order and the view
@@ -100,9 +100,13 @@ Built with Laravel 13 + MySQL + Blade + plain JavaScript (no front-end build ste
 - Flags are **recursive**: flagging a folder flags everything below it. A sub folder can be un-flagged (and then its
   children are un-flagged too). Setting a folder always overwrites the flags of all folders below it.
   Table `otd_folders` (user, real path, flagged); the nearest row above a folder decides (`App\Gallery\OtdFolders`).
-- Every day at **19:00 project time (IRST)** `gallery:otd-telegram` sends photos and videos taken on that date in past
-  years to a Telegram group or channel. It uses the flagged folders of **admin** users only (normal users do not get
-  Telegram messages). Settings: bot token (stored encrypted), group/channel ID, minimum years, max images, max videos.
+- `gallery:otd-telegram` runs every minute from the scheduler and sends photos and videos taken on that date in past
+  years to a Telegram group or channel, but only when the admin schedule says so: **chosen weekdays** (default:
+  Thursday) or **every N days** (counted from the last send), at **one fixed time** (default 20:00, project time zone).
+  At most one send per day; if the server was down at that time, it sends later the same day.
+  It uses the flagged folders of **admin** users only (normal users do not get
+  Telegram messages). Settings: bot token (stored encrypted), group/channel ID, schedule (mode, weekdays, N, time),
+  minimum years, max images, max videos.
   Videos over 50 MB are skipped; photos over 10 MB are sent as files. The bot must be a member of the group
   (an admin of the channel). The *Send today's memories now* button on the settings page sends the same message at once.
 
@@ -224,7 +228,7 @@ Useful commands:
 | `gallery:copy-video <id>` | copy one video to the local temporary folder, and convert it if needed (started by the web app) |
 | `gallery:video-drop <id> [--delay=]` | delete one video's local files a few seconds after the last viewer left (started by the web app) |
 | `gallery:video-clean [--minutes=]` | delete local video copies that no viewer shows (scheduler: every minute) |
-| `gallery:otd-telegram [--force]` | send today's "On this day" memories to Telegram (scheduler: daily 19:00 IRST) |
+| `gallery:otd-telegram [--force]` | send today's "On this day" memories to Telegram (scheduler: every minute, sends only when the admin schedule is due; `--force` ignores it) |
 
 Tests: `php artisan test`.
 

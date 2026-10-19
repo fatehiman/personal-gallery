@@ -365,6 +365,47 @@ class FeaturesTest extends TestCase
         $this->assertFalse(TelegramDigest::configured()); // not enabled any more
     }
 
+    public function test_telegram_schedule_weekdays_interval_and_time(): void
+    {
+        $thu = Carbon::parse('2026-10-15 20:00', 'Asia/Tehran'); // a Thursday
+        $this->assertTrue(TelegramDigest::due($thu)); // default: Thursday 20:00
+        $this->assertFalse(TelegramDigest::due($thu->copy()->setTime(19, 59)));
+        $this->assertFalse(TelegramDigest::due($thu->copy()->addDay())); // Friday
+        Settings::set('otd_last_sent', '2026-10-15');
+        $this->assertFalse(TelegramDigest::due($thu->copy()->setTime(21, 0))); // already sent today
+
+        Settings::set('otd_weekdays', '5,7');
+        Settings::set('otd_last_sent', null);
+        $this->assertFalse(TelegramDigest::due($thu));
+        $this->assertTrue(TelegramDigest::due($thu->copy()->addDay()));
+
+        Settings::set('otd_mode', 'interval');
+        Settings::set('otd_interval_days', 3);
+        Settings::set('otd_time', '08:30');
+        $this->assertTrue(TelegramDigest::due($thu->copy()->setTime(8, 30))); // never sent
+        Settings::set('otd_last_sent', '2026-10-13');
+        $this->assertFalse(TelegramDigest::due($thu->copy()->setTime(9, 0))); // 2 days
+        Settings::set('otd_last_sent', '2026-10-12');
+        $this->assertTrue(TelegramDigest::due($thu->copy()->setTime(9, 0))); // 3 days
+    }
+
+    public function test_telegram_schedule_settings_are_validated_and_saved(): void
+    {
+        $admin = $this->user(true);
+        $base = ['telegram_chat' => '-1001234567890', 'otd_min_years' => 2, 'otd_max_images' => 7, 'otd_max_videos' => 3, 'crawl_seconds' => 20];
+        $this->actingAs($admin)->post('/admin/settings', $base + ['otd_mode' => 'weekdays', 'otd_time' => '20:00'])
+            ->assertSessionHasErrors('otd_weekdays'); // weekdays mode needs a day
+        $this->actingAs($admin)->post('/admin/settings', $base + ['otd_mode' => 'interval', 'otd_interval_days' => 400, 'otd_time' => '20:00'])
+            ->assertSessionHasErrors('otd_interval_days');
+        $this->actingAs($admin)->post('/admin/settings', $base + ['otd_mode' => 'weekdays', 'otd_weekdays' => [1, 3], 'otd_interval_days' => 5, 'otd_time' => '07:15'])
+            ->assertSessionHasNoErrors();
+        Settings::reset();
+        $this->assertSame([1, 3], TelegramDigest::weekdays());
+        $this->assertSame('07:15', TelegramDigest::time());
+        $this->assertSame('weekdays', TelegramDigest::mode());
+        $this->actingAs($admin)->get('/admin/settings')->assertOk();
+    }
+
     public function test_telegram_digest_picks_flagged_old_files_and_skips_big_videos(): void
     {
         $admin = $this->user(true);
